@@ -33,3 +33,8 @@ dist
 dist-ssr
 build
 target
+
+.vscode
+.claude
+CLAUDE.md
+INTERVIEW_NOTES.md
