@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Clock, Calendar, Settings } from 'lucide-react'
+import { Home, Clock, Calendar, User } from 'lucide-react'
 
 // Pure layout: just renders its child page + the bottom nav.
 // No state here anymore — reminder data lives in the store (useReminders).
@@ -25,7 +25,7 @@ function Layout({ children }) {
         </NavLink>
 
         <NavLink to="/settings">
-            <Settings size={20}/>
+            <User size={20}/>
         </NavLink>
 
 

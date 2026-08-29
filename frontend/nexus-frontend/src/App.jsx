@@ -3,7 +3,7 @@ import LoginPage from './pages/LoginPage'
 import DashBoardPage from './pages/DashboardPage'
 import Layout from './components/Layout'
 import UpcomingPage from './pages/UpcomingPage'
-import SettingsPage from './pages/SettingsPage'
+import ProfilePage from './pages/ProfilePage'
 import CalendarPage from './pages/CalendarPage'
 import { RemindersProvider } from './store/reminders'
 
@@ -17,7 +17,7 @@ function App() {
           <Route path="/dashboard" element={<Layout><DashBoardPage /></Layout>} />
           <Route path="/upcoming" element={<Layout><UpcomingPage /></Layout>} />
           <Route path="/calendar" element={<Layout><CalendarPage /></Layout>} />
-          <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
+          <Route path="/settings" element={<Layout><ProfilePage /></Layout>} />
           <Route path="/" element={ <Navigate to="/login" replace />} />
         </Routes>
       </RemindersProvider>
