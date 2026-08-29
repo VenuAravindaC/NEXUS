@@ -23,9 +23,20 @@ function DashboardPage() {
 
     const editingReminder = reminders.find(r => r.id === editingId) ?? null
 
+    // Dashboard = "today + future only" = things that need your attention.
+    // Past-day reminders vanish here (Calendar keeps the full history).
+    // Location reminders always show — they have no date to expire.
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const activeReminders = reminders.filter(r => {
+        if (r.type === 'location') return true
+        if (!r.remindAt) return true
+        return new Date(r.remindAt) >= todayStart
+    })
+
     // Display rule: newest created first. The notebook keeps insert order;
     // the PAGE decides how to present it. (Upcoming/Calendar order it differently.)
-    const sortedReminders = [...reminders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    const sortedReminders = [...activeReminders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
     // Whenever editingId changes (e.g. we navigated here from Upcoming after startEdit),
     // pre-fill the form with that reminder and open the modal.
