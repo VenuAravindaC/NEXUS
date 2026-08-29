@@ -1,14 +1,17 @@
-import { Plus, X } from 'lucide-react'
-import { useState } from 'react'
+import { Plus, X, Ban } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import ReminderCard from '../components/ReminderCard'
+import { useReminders } from '../store/reminders'
 
-function DashboardPage({ reminders, setReminders }) {
+function DashboardPage() {
+    const { reminders, editingId, addReminder, toggleDone, editReminder, deleteReminder, startEdit, stopEdit } = useReminders()
 
+    // Local UI state — only about the modal form, NOT the reminders themselves.
     const [isModalOpen, setIsModalOpen] = useState(false)
-    const [editingId, setEditingId] = useState(null)
     const [reminderType, setReminderType] = useState('time')
     const [title, setTitle] = useState('')
     const [remindAt, setRemindAt] = useState('')
+    const [saveError, setSaveError] = useState('')
 
     // Convert a stored UTC ISO string into what <input type="datetime-local"> expects:
     // "YYYY-MM-DDTHH:mm" expressed in the user's LOCAL time.
@@ -18,73 +21,81 @@ function DashboardPage({ reminders, setReminders }) {
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
     }
 
-    const openModal = () => setIsModalOpen(true)
-    const closeModal = () => {
-        setIsModalOpen(false)
-        setEditingId(null)
+    const editingReminder = reminders.find(r => r.id === editingId) ?? null
+
+    // Display rule: newest created first. The notebook keeps insert order;
+    // the PAGE decides how to present it. (Upcoming/Calendar order it differently.)
+    const sortedReminders = [...reminders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+
+    // Whenever editingId changes (e.g. we navigated here from Upcoming after startEdit),
+    // pre-fill the form with that reminder and open the modal.
+    useEffect(() => {
+        if (editingReminder) {
+            setReminderType(editingReminder.type)
+            setTitle(editingReminder.title)
+            setRemindAt(
+                editingReminder.type === 'time' && editingReminder.remindAt
+                    ? toLocalInputValue(editingReminder.remindAt)
+                    : ''
+            )
+            setIsModalOpen(true)
+        }
+    }, [editingReminder])
+
+    const openNewModal = () => {
+        stopEdit() // make sure we're not editing anything
         setReminderType('time')
         setTitle('')
         setRemindAt('')
+        setSaveError('')
+        setIsModalOpen(true)
+    }
+
+    const closeModal = () => {
+        stopEdit()
+        setIsModalOpen(false)
+        setReminderType('time')
+        setTitle('')
+        setRemindAt('')
+        setSaveError('')
     }
 
     const handleSave = () => {
         if (!title.trim()) return
 
-        if (editingId) {
-            // EDIT MODE: update the existing reminder
-            setReminders(reminders.map(r =>
-                r.id === editingId
-                    ? {
-                        ...r,
-                        title: title.trim(),
-                        type: reminderType,
-                        remindAt: reminderType === 'time' ? new Date(remindAt).toISOString() : null
-                    }
-                    : r
-            ))
-        } else {
-            // CREATE MODE: add a new reminder
-            const newReminder = {
+        // Pack the envelope (read the form fields)
+        const reminderData = {
+            title: title.trim(),
+            type: reminderType,
+            remindAt: reminderType === 'time' ? new Date(remindAt).toISOString() : null
+        }
+
+        // Knock on the door — the notebook DECIDES, we just listen
+        const result = editingId
+            ? editReminder(editingId, reminderData)
+            : addReminder({
                 id: Date.now().toString(),
-                title: title.trim(),
-                type: reminderType,
-                remindAt: reminderType === 'time' ? new Date(remindAt).toISOString() : null,
+                ...reminderData,
                 latitude: null,
                 longitude: null,
                 locationName: null,
                 radius: 250,
                 isDone: false,
                 createdAt: new Date().toISOString()
-            }
-            setReminders([...reminders, newReminder])
+            })
+
+        if (!result.ok) {
+            setSaveError(result.error) // the door refused — show 🚫 + message
+            return
         }
 
         closeModal()
     }
 
-    const handleToggleDone = (id) => {
-        setReminders(reminders.map(r =>
-            r.id === id ? { ...r, isDone: !r.isDone } : r
-        ))
-    }
-
-    const handleDelete = (id) => {
-        setReminders(reminders.filter(r => r.id !== id))
-    }
-
     const handleEdit = (id) => {
-        const reminder = reminders.find(r => r.id === id)
-        if (!reminder) return // Guard: reminder was deleted
-
-        // Pre-fill form fields
-        setEditingId(id)
-        setReminderType(reminder.type)
-        setTitle(reminder.title)
-        if (reminder.type === 'time' && reminder.remindAt) {
-            setRemindAt(toLocalInputValue(reminder.remindAt))
-        }
-
-        setIsModalOpen(true)
+        // Tell the notebook "reminder id is being edited" — the effect above
+        // will pre-fill the form and open the modal for us.
+        startEdit(id)
     }
 
     return (
@@ -93,20 +104,20 @@ function DashboardPage({ reminders, setReminders }) {
                 <h1 className="text-2xl font-bold">My Reminders</h1>
             </div>
 
-            {reminders.length === 0 ? (
+            {sortedReminders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center mt-32 px-8 text-center">
                     <h2 className="text-xl font-semibold mb-2">No reminders yet</h2>
                     <p className="text-gray-400">Tap the + button to create your first reminder</p>
                 </div>
             ) : (
                 <div className="p-4">
-                    {reminders.map(reminder => (
+                    {sortedReminders.map(reminder => (
                         <ReminderCard
                             key={reminder.id}
                             reminder={reminder}
-                            onToggleDone={handleToggleDone}
+                            onToggleDone={() => toggleDone(reminder.id)}
                             onEdit={handleEdit}
-                            onDelete={handleDelete}
+                            onDelete={() => deleteReminder(reminder.id)}
                         />
                     ))}
                 </div>
@@ -114,7 +125,7 @@ function DashboardPage({ reminders, setReminders }) {
 
             {/* Floating + Button */}
             <button
-                onClick={openModal}
+                onClick={openNewModal}
                 className="fixed bottom-20 right-6 w-14 h-14 bg-white text-black rounded-full flex items-center justify-center shadow-lg hover:bg-gray-200 transition-colors"
             >
                 <Plus size={24} />
@@ -171,9 +182,15 @@ function DashboardPage({ reminders, setReminders }) {
                                     <input
                                         type="datetime-local"
                                         value={remindAt}
-                                        onChange={(e) => setRemindAt(e.target.value)}
+                                        onChange={(e) => { setRemindAt(e.target.value); setSaveError('') }}
                                         className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gray-500"
                                     />
+                                    {saveError && (
+                                        <div className="flex items-center gap-2 mt-2 text-red-400 text-sm">
+                                            <Ban size={16} />
+                                            <span>{saveError}</span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -187,7 +204,7 @@ function DashboardPage({ reminders, setReminders }) {
                             {/* Save Button */}
                             <button
                                 onClick={handleSave}
-                                disabled={!title.trim()}
+                                disabled={!title.trim() || (reminderType === 'time' && !remindAt) || Boolean(saveError)}
                                 className="w-full bg-white text-black font-medium py-3 rounded-lg hover:bg-gray-200 transition-colors disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
                             >
                                 Save Reminder

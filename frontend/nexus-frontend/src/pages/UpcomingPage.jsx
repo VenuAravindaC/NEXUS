@@ -1,6 +1,10 @@
 import ReminderCard from '../components/ReminderCard'
+import { useReminders } from '../store/reminders'
+import { useNavigate } from 'react-router-dom'
 
-function UpcomingPage({ reminders, setReminders }) {
+function UpcomingPage() {
+    const { reminders, toggleDone, deleteReminder, startEdit } = useReminders()
+    const navigate = useNavigate()
 
     // Format date for display: "Aug 22" or "Today" / "Tomorrow"
     const formatDateHeader = (dateString) => {
@@ -40,20 +44,11 @@ function UpcomingPage({ reminders, setReminders }) {
         list.sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt))
     )
 
-    const handleToggleDone = (id) => {
-        setReminders(reminders.map(r =>
-            r.id === id ? { ...r, isDone: !r.isDone } : r
-        ))
-    }
-
-    const handleDelete = (id) => {
-        setReminders(reminders.filter(r => r.id !== id))
-    }
-
     const handleEdit = (id) => {
-        // Navigate to dashboard with edit mode - or we could emit an event
-        // For simplicity, navigate to dashboard where the modal already exists
-        window.location.href = `/dashboard?edit=${id}`
+        // Tell the notebook "we're editing this one"
+        startEdit(id)
+        // Then go to the Dashboard — its effect reads editingId and opens the modal prefilled.
+        navigate('/dashboard')
     }
 
     return (
@@ -83,9 +78,9 @@ function UpcomingPage({ reminders, setReminders }) {
                                 <ReminderCard
                                     key={reminder.id}
                                     reminder={reminder}
-                                    onToggleDone={handleToggleDone}
-                                    onEdit={handleEdit}
-                                    onDelete={handleDelete}
+                                    onToggleDone={() => toggleDone(reminder.id)}
+                                    onEdit={() => handleEdit(reminder.id)}
+                                    onDelete={() => deleteReminder(reminder.id)}
                                 />
                             ))}
                         </div>

@@ -1,0 +1,171 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import ReminderCard from '../components/ReminderCard'
+import { useReminders } from '../store/reminders'
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+]
+
+// Turn a Date into a day-key like "2026-09-05" in the user's LOCAL timezone.
+// We use local, not UTC, so a reminder at 23:30 shows up on the day the user meant.
+const localDateKey = (date) => {
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function CalendarPage() {
+    const { reminders, toggleDone, deleteReminder, startEdit } = useReminders()
+    const navigate = useNavigate()
+
+    const today = new Date()
+    const [viewYear, setViewYear] = useState(today.getFullYear())
+    const [viewMonth, setViewMonth] = useState(today.getMonth()) // 0–11
+    const [selectedDate, setSelectedDate] = useState(localDateKey(today))
+
+    // Move the view one month at a time
+    const shiftMonth = (delta) => {
+        const d = new Date(viewYear, viewMonth + delta, 1)
+        setViewYear(d.getFullYear())
+        setViewMonth(d.getMonth())
+    }
+
+    const goToday = () => {
+        setViewYear(today.getFullYear())
+        setViewMonth(today.getMonth())
+        setSelectedDate(localDateKey(today))
+    }
+
+    // Build the month grid: leading blanks (before the 1st), then day numbers 1..N
+    const leadingBlanks = new Date(viewYear, viewMonth, 1).getDay() // weekday of the 1st
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+    const cells = []
+    for (let i = 0; i < leadingBlanks; i++) cells.push(null)
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+    // ALL time-based reminders — done ones included. Done = history, part of
+    // that day's record. (Upcoming is the planner, so it stays active-only.)
+    const timeReminders = reminders.filter(r => r.type === 'time' && r.remindAt)
+    // Set of day-keys that have at least one reminder (drives the little dots)
+    const reminderDays = new Set(timeReminders.map(r => localDateKey(new Date(r.remindAt))))
+
+    // Reminders shown in the dropdown for the selected day, earliest first
+    const selectedReminders = timeReminders
+        .filter(r => localDateKey(new Date(r.remindAt)) === selectedDate)
+        .sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt))
+
+    const [selYear, selMonth, selDay] = selectedDate.split('-').map(Number)
+    const selectedLabel = `${MONTHS[selMonth - 1]} ${selDay}, ${selYear}`
+
+    const handleEdit = (id) => {
+        startEdit(id)          // notebook: "we're editing this one"
+        navigate('/dashboard') // Dashboard's effect opens the prefilled modal
+    }
+
+    return (
+        <div className="min-h-screen pb-20 p-4 pt-8">
+            <h1 className="text-2xl font-bold mb-6">Calendar</h1>
+
+            {/* Month grid */}
+            <section className="bg-[#1a1a1a] rounded-2xl border border-gray-800 p-4 max-w-md mx-auto w-full">
+                {/* Month header */}
+                <div className="flex items-center justify-between mb-4">
+                    <button
+                        onClick={() => shiftMonth(-1)}
+                        className="p-2 text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded-lg"
+                    >
+                        <ChevronLeft size={20} />
+                    </button>
+
+                    <div className="text-center">
+                        <h2 className="text-lg font-semibold">{MONTHS[viewMonth]} {viewYear}</h2>
+                        <button onClick={goToday} className="text-xs text-gray-400 hover:text-white mt-0.5">
+                            Today
+                        </button>
+                    </div>
+
+                    <button
+                        onClick={() => shiftMonth(1)}
+                        className="p-2 text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded-lg"
+                    >
+                        <ChevronRight size={20} />
+                    </button>
+                </div>
+
+                {/* Weekday labels */}
+                <div className="grid grid-cols-7 text-center text-xs text-gray-500 mb-1">
+                    {WEEKDAYS.map(day => (
+                        <div key={day} className="py-1">{day}</div>
+                    ))}
+                </div>
+
+                {/* Day cells */}
+                <div className="grid grid-cols-7 gap-1">
+                    {cells.map((day, index) => {
+                        if (day === null) return <div key={`blank-${index}`} />
+
+                        const dayKey = localDateKey(new Date(viewYear, viewMonth, day))
+                        const isTodayCell =
+                            viewYear === today.getFullYear() &&
+                            viewMonth === today.getMonth() &&
+                            day === today.getDate()
+                        const isSelected = selectedDate === dayKey
+                        const hasReminders = reminderDays.has(dayKey)
+
+                        return (
+                            <button
+                                key={day}
+                                onClick={() => setSelectedDate(dayKey)}
+                                className={`relative aspect-square rounded-full flex items-center justify-center text-sm transition-colors ${
+                                    isTodayCell
+                                        ? 'bg-white text-black font-semibold'
+                                        : isSelected
+                                            ? 'bg-[#333333] text-white ring-1 ring-gray-500'
+                                            : 'text-white hover:bg-[#2a2a2a]'
+                                }`}
+                            >
+                                {day}
+                                {hasReminders && (
+                                    <span
+                                        className={`absolute bottom-1.5 w-1 h-1 rounded-full ${isTodayCell ? 'bg-black' : 'bg-gray-400'}`}
+                                    />
+                                )}
+                            </button>
+                        )
+                    })}
+                </div>
+            </section>
+
+            {/* Dropdown for the selected day */}
+            <section className="mt-6">
+                <div className="flex items-center justify-between mb-3 px-1">
+                    <h2 className="text-lg font-semibold">{selectedLabel}</h2>
+                    <span className="text-sm text-gray-400">
+                        {selectedReminders.length} {selectedReminders.length === 1 ? 'reminder' : 'reminders'}
+                    </span>
+                </div>
+
+                {selectedReminders.length === 0 ? (
+                    <div className="bg-[#242424] rounded-lg p-6 text-center text-gray-400 text-sm">
+                        No reminders on this day
+                    </div>
+                ) : (
+                    selectedReminders.map(reminder => (
+                        <ReminderCard
+                            key={reminder.id}
+                            reminder={reminder}
+                            onToggleDone={() => toggleDone(reminder.id)}
+                            onEdit={() => handleEdit(reminder.id)}
+                            onDelete={() => deleteReminder(reminder.id)}
+                        />
+                    ))
+                )}
+            </section>
+        </div>
+    )
+}
+
+export default CalendarPage

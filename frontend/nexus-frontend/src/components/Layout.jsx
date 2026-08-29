@@ -1,29 +1,13 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Calendar, Settings } from 'lucide-react'
-import { useState , cloneElement } from 'react'
+import { Home, Clock, Calendar, Settings } from 'lucide-react'
 
+// Pure layout: just renders its child page + the bottom nav.
+// No state here anymore — reminder data lives in the store (useReminders).
 function Layout({ children }) {
-
-  const [ reminders , setReminders ] = useState([])/**
-   * Reminder shape:
-   * {
-   *   id: string,
-   *   title: string,
-   *   type: "time" | "location",
-   *   remindAt: string | null,          // UTC timestamp for time-based
-   *   latitude: number | null,          // for location-based
-   *   longitude: number | null,         // for location-based
-   *   locationName: string | null,      // display name for location
-   *   radius: number,                   // meters, default 250
-   *   isDone: boolean,
-   *   createdAt: string                 // UTC timestamp
-   * }
-   */
-
   return (
     <div className="min-h-screen flex flex-col">
       <div className="flex-1">
-        {cloneElement(children, { reminders, setReminders })}
+        {children}
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 flex justify-around py-3 bg-[#1a1a1a] border-t border-gray-800">
@@ -33,6 +17,10 @@ function Layout({ children }) {
         </NavLink>
 
         <NavLink to ="/upcoming">
+            <Clock size={20}/>
+        </NavLink>
+
+        <NavLink to ="/calendar">
             <Calendar size={20}/>
         </NavLink>
 
