@@ -72,11 +72,26 @@ export function RemindersProvider({ children }) {
     editingId: null,
   })
 
-  // The guard (the door guard). A time-based reminder can never be scheduled
-  // in the past — 'type' must be "time" AND have a date AND that date must be
-  // in the future. Lives here so EVERY page that walks through this door is covered.
-  const isPastTime = (type, remindAt) =>
-    type === 'time' && remindAt && new Date(remindAt) <= new Date()
+  // The guard (the door guard). One pure function checks EVERY rule a reminder
+  // must satisfy before it's allowed in — time reminders can't be in the past,
+  // and location reminders must have a spot picked. Lives here so every page
+  // that walks through this door is covered. Returns an error string or null.
+  const validationError = (reminder) => {
+    if (
+      reminder.type === 'time' &&
+      reminder.remindAt &&
+      new Date(reminder.remindAt) <= new Date()
+    ) {
+      return 'Time has already passed'
+    }
+    if (
+      reminder.type === 'location' &&
+      (!reminder.latitude || !reminder.longitude)
+    ) {
+      return 'Pick a location on the map'
+    }
+    return null
+  }
 
   const value = {
     reminders: state.reminders,
@@ -84,9 +99,8 @@ export function RemindersProvider({ children }) {
 
     // Each door returns { ok, error } — the page listens for the verdict.
     addReminder: (reminder) => {
-      if (isPastTime(reminder.type, reminder.remindAt)) {
-        return { ok: false, error: 'Time has already passed' }
-      }
+      const err = validationError(reminder)
+      if (err) return { ok: false, error: err }
       dispatch({ type: 'add', payload: reminder })
       return { ok: true }
     },
@@ -94,9 +108,8 @@ export function RemindersProvider({ children }) {
     toggleDone: (id) => dispatch({ type: 'toggle', payload: { id } }),
 
     editReminder: (id, changes) => {
-      if (isPastTime(changes.type, changes.remindAt)) {
-        return { ok: false, error: 'Time has already passed' }
-      }
+      const err = validationError(changes)
+      if (err) return { ok: false, error: err }
       dispatch({ type: 'edit', payload: { id, changes } })
       return { ok: true }
     },

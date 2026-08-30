@@ -1,7 +1,12 @@
 import { Plus, X, Ban } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import ReminderCard from '../components/ReminderCard'
 import { useReminders } from '../store/reminders'
+
+// Leaflet is heavy — only pull it in when the user is actually in location mode.
+const LocationPicker = lazy(() => import('../components/LocationPicker'))
+
+const RADIUS_OPTIONS = [100, 250, 500, 1000]
 
 function DashboardPage() {
     const { reminders, editingId, addReminder, toggleDone, editReminder, deleteReminder, startEdit, stopEdit } = useReminders()
@@ -11,6 +16,10 @@ function DashboardPage() {
     const [reminderType, setReminderType] = useState('time')
     const [title, setTitle] = useState('')
     const [remindAt, setRemindAt] = useState('')
+    const [latitude, setLatitude] = useState(null)
+    const [longitude, setLongitude] = useState(null)
+    const [locationName, setLocationName] = useState('')
+    const [radius, setRadius] = useState(250)
     const [saveError, setSaveError] = useState('')
 
     // Convert a stored UTC ISO string into what <input type="datetime-local"> expects:
@@ -49,36 +58,59 @@ function DashboardPage() {
                     ? toLocalInputValue(editingReminder.remindAt)
                     : ''
             )
+            setLatitude(editingReminder.latitude ?? null)
+            setLongitude(editingReminder.longitude ?? null)
+            setLocationName(editingReminder.locationName ?? '')
+            setRadius(editingReminder.radius ?? 250)
             setIsModalOpen(true)
         }
     }, [editingReminder])
 
-    const openNewModal = () => {
-        stopEdit() // make sure we're not editing anything
+    // Wipe the whole form back to a blank "new time reminder".
+    const resetForm = () => {
         setReminderType('time')
         setTitle('')
         setRemindAt('')
+        setLatitude(null)
+        setLongitude(null)
+        setLocationName('')
+        setRadius(250)
         setSaveError('')
+    }
+
+    const openNewModal = () => {
+        stopEdit() // make sure we're not editing anything
+        resetForm()
         setIsModalOpen(true)
     }
 
     const closeModal = () => {
         stopEdit()
         setIsModalOpen(false)
-        setReminderType('time')
-        setTitle('')
-        setRemindAt('')
-        setSaveError('')
+        resetForm()
     }
 
     const handleSave = () => {
         if (!title.trim()) return
+        const isLocation = reminderType === 'location'
 
-        // Pack the envelope (read the form fields)
+        // Location reminder needs a spot — check it BEFORE packing so the error
+        // reads clearly (the notebook door double-checks as the safety net).
+        if (isLocation && (!latitude || !longitude)) {
+            setSaveError('Pick a location on the map')
+            return
+        }
+
+        // Pack the envelope (read the form fields). Location reminders carry
+        // no time; time reminders carry no spot — each side is null on the other.
         const reminderData = {
             title: title.trim(),
             type: reminderType,
-            remindAt: reminderType === 'time' ? new Date(remindAt).toISOString() : null
+            remindAt: isLocation ? null : new Date(remindAt).toISOString(),
+            latitude: isLocation ? latitude : null,
+            longitude: isLocation ? longitude : null,
+            locationName: isLocation ? (locationName.trim() || 'Pinned location') : null,
+            radius: isLocation ? radius : 250,
         }
 
         // Knock on the door — the notebook DECIDES, we just listen
@@ -87,10 +119,6 @@ function DashboardPage() {
             : addReminder({
                 id: Date.now().toString(),
                 ...reminderData,
-                latitude: null,
-                longitude: null,
-                locationName: null,
-                radius: 250,
                 isDone: false,
                 createdAt: new Date().toISOString()
             })
@@ -205,10 +233,62 @@ function DashboardPage() {
                                 </div>
                             )}
 
-                            {/* Location-based Fields (placeholder for now) */}
+                            {/* Location-based Fields */}
                             {reminderType === 'location' && (
-                                <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg px-4 py-8 text-center text-gray-400">
-                                    Map picker will go here (Day 5)
+                                <div className="space-y-4">
+                                    {/* The map: deep module — tap to drop a pin.
+                                        Lazy-loaded so Leaflet only downloads in location mode. */}
+                                    <Suspense fallback={
+                                        <div className="bg-[#2a2a2a] border border-gray-700 rounded-lg h-[240px] flex items-center justify-center text-gray-400 text-sm">
+                                            Loading map…
+                                        </div>
+                                    }>
+                                        <LocationPicker
+                                            radius={radius}
+                                            initialCenter={latitude && longitude ? { latitude, longitude } : null}
+                                            onLocationSelect={({ latitude: lat, longitude: lng, locationName: name }) => {
+                                                setLatitude(lat)
+                                                setLongitude(lng)
+                                                setLocationName(name)
+                                                setSaveError('')
+                                            }}
+                                        />
+                                    </Suspense>
+
+                                    {/* Editable name — auto-filled from the tap, user can fix it */}
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-1">Location name</label>
+                                        <input
+                                            type="text"
+                                            value={locationName}
+                                            onChange={(e) => setLocationName(e.target.value)}
+                                            placeholder="Pinned location"
+                                            className="w-full bg-[#2a2a2a] border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-gray-500"
+                                        />
+                                    </div>
+
+                                    {/* Radius — the geofence size */}
+                                    <div>
+                                        <label className="block text-sm text-gray-400 mb-1">Alert radius</label>
+                                        <div className="flex gap-2">
+                                            {RADIUS_OPTIONS.map(r => (
+                                                <button
+                                                    key={r}
+                                                    onClick={() => setRadius(r)}
+                                                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${radius === r ? 'bg-white text-black' : 'bg-[#2a2a2a] text-white'}`}
+                                                >
+                                                    {r}m
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {saveError && (
+                                        <div className="flex items-center gap-2 text-red-400 text-sm">
+                                            <Ban size={16} />
+                                            <span>{saveError}</span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
