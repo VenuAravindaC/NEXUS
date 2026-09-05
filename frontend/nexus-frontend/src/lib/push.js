@@ -58,52 +58,68 @@ export function getPermissionState() {
 /**
  * Turn notifications ON: ask permission → subscribe to the provider → save
  * the subscription on our backend. Returns { ok: true } or { ok: false, error }.
+ *
+ * Every step is wrapped in try/catch so errors surface clearly to the caller
+ * instead of hanging or failing silently. navigator.serviceWorker.ready gets
+ * a 10-second timeout so the function never hangs indefinitely if the
+ * service worker failed to register.
  */
 export async function subscribeToPush(userId) {
-    if (!isNotificationSupported()) {
-        return { ok: false, error: 'Push not supported in this browser' }
+    try {
+        if (!isNotificationSupported()) {
+            return { ok: false, error: 'Push not supported in this browser' }
+        }
+
+        // 1. Permission. If the user hasn't decided yet, ask. If they already
+        //    denied, or we can't get permission, stop here — no point subscribing.
+        if (Notification.permission === 'default') {
+            await Notification.requestPermission()
+        }
+        if (Notification.permission !== 'granted') {
+            return { ok: false, error: 'Notification permission denied' }
+        }
+
+        // 2. Service worker must be active before we can subscribe (the browser
+        //    attaches the subscription to the SW registration). If the SW failed
+        //    to register, navigator.serviceWorker.ready hangs forever — so we
+        //    race it against a 10-second timeout and fail clearly.
+        const registration = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Service worker took too long to activate')), 10_000)
+            ),
+        ])
+
+        // 3. Subscribe to the provider. applicationServerKey proves to the
+        //    provider that OUR app (VAPID keys) is allowed to send to this device.
+        //    userVisibleOnly is required — browsers demand every push be visible.
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        })
+
+        // 4. Persist the subscription (the mailbox keys) on our backend so the
+        //    scheduler can find it later. subscription.toJSON() gives us the
+        //    nested { endpoint, expirationTime, keys: { p256dh, auth } } shape
+        //    the backend's PushSubscriptionRequest record expects.
+        const sub = subscription.toJSON()
+        const res = await fetch(`${API_URL}/api/push-subscriptions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId,
+                endpoint: subscription.endpoint,
+                keys: { p256dh: sub.keys?.p256dh, auth: sub.keys?.auth },
+            }),
+        })
+
+        if (!res.ok) {
+            return { ok: false, error: `Backend rejected subscription (HTTP ${res.status})` }
+        }
+        return { ok: true }
+    } catch (err) {
+        return { ok: false, error: err.message || 'Subscription failed unexpectedly' }
     }
-
-    // 1. Permission. If the user hasn't decided yet, ask. If they already
-    //    denied, or we can't get permission, stop here — no point subscribing.
-    if (Notification.permission === 'default') {
-        await Notification.requestPermission()
-    }
-    if (Notification.permission !== 'granted') {
-        return { ok: false, error: 'Notification permission denied' }
-    }
-
-    // 2. Service worker must be active before we can subscribe (the browser
-    //    attaches the subscription to the SW registration).
-    const registration = await navigator.serviceWorker.ready
-
-    // 3. Subscribe to the provider. applicationServerKey proves to the
-    //    provider that OUR app (VAPID keys) is allowed to send to this device.
-    //    userVisibleOnly is required — browsers demand every push be visible.
-    const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    })
-
-    // 4. Persist the subscription (the mailbox keys) on our backend so the
-    //    scheduler can find it later. subscription.toJSON() gives us the
-    //    nested { endpoint, expirationTime, keys: { p256dh, auth } } shape
-    //    the backend's PushSubscriptionRequest record expects.
-    const sub = subscription.toJSON()
-    const res = await fetch(`${API_URL}/api/push-subscriptions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            userId,
-            endpoint: subscription.endpoint,
-            keys: { p256dh: sub.keys?.p256dh, auth: sub.keys?.auth },
-        }),
-    })
-
-    if (!res.ok) {
-        return { ok: false, error: `Backend rejected subscription (HTTP ${res.status})` }
-    }
-    return { ok: true }
 }
 
 /**

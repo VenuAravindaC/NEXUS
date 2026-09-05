@@ -14,8 +14,8 @@ export default defineConfig({
       filename: 'sw.js',
       devOptions: { enabled: true },
       manifest: {
-        name: 'NEXUS — Smart Reminders',
-        short_name: 'NEXUS',
+        name: 'CUE — Smart Reminders',
+        short_name: 'CUE',
         description: 'Time-based and location-based smart reminders',
         start_url: '/dashboard',
         display: 'standalone',

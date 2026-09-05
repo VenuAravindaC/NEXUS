@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -111,6 +112,7 @@ public class Reminder {
      * Jackson serializes this as "fired" automatically (plain boolean field name).
      */
     @Column(name = "fired", nullable = false)
+    @ColumnDefault("false")
     @Builder.Default
     private boolean fired = false;
 

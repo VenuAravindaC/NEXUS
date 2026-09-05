@@ -2,7 +2,7 @@
  * generate-icons.mjs — one-off PWA icon generator.
  *
  * Creates public/icons/{icon-192,icon-512,apple-touch-icon}.png from the
- * NEXUS brand color (#1a1a1a bg, #863bff accent) + a simple "N".
+ * CUE brand palette (#1a1a1a bg) + a simple white bell.
  *
  * Run: node scripts/generate-icons.mjs
  * Then you can delete this script (it's a dev tool, not app code).
@@ -16,24 +16,50 @@ import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const BG = { r: 26, g: 26, b: 26 }        // #1a1a1a — app background
-const ACCENT = { r: 134, g: 59, b: 255 }  // #863bff — NEXUS purple
-const FG = { r: 255, g: 255, b: 255 }     // white — the "N"
+const BG = { r: 26, g: 26, b: 26 }    // #1a1a1a — app background
+const FG = { r: 255, g: 255, b: 255 } // white — the bell
 
 /**
- * Draw one icon. We rasterize two overlapping shapes by hand:
- *   - a filled square background
- *   - a bold "N" drawn as two vertical strokes + a diagonal (thick lines)
- * Then mask the corners to rounded-square for a modern app-icon look.
+ * Is a normalized point (u, v) in [0,1]² inside the bell?
  *
- * This is intentionally simple — it's a placeholder that matches the brand
- * palette, not a design masterpiece.
+ * The bell is a union of simple shapes (see the doc comment at the bottom
+ * for the geometry sketch):
+ *   1. dome      — a circle for the rounded top
+ *   2. skirt     — a flared trapezoid that widens toward the bottom
+ *   3. lip       — a capsule (rounded bar) at the bottom rim
+ *   4. clapper   — a tiny circle hanging below, on a thin stem
+ */
+function inBell(u, v) {
+  // --- 1. Dome: circle centered at (0.50, 0.42), radius 0.26 ---
+  const dome = (u - 0.5) ** 2 + (v - 0.42) ** 2 <= 0.26 ** 2
+
+  // --- 2. Skirt: flared trapezoid, v in [0.42, 0.72],
+  //        half-width grows 0.26 -> 0.34 ---
+  const skirtT = 0.42, skirtB = 0.72, wT = 0.26, wB = 0.34
+  const skirt = v >= skirtT && v <= skirtB
+    && Math.abs(u - 0.5) <= wT + (wB - wT) * (v - skirtT) / (skirtB - skirtT)
+
+  // --- 3. Lip: capsule centered at (0.5, 0.75), half-length 0.40,
+  //        tube radius 0.055 ---
+  const lipY = 0.75, lipHalf = 0.40, lipR = 0.055
+  const lipClampX = Math.max(0.5 - lipHalf, Math.min(0.5 + lipHalf, u))
+  const lip = (v - lipY) ** 2 + (u - lipClampX) ** 2 <= lipR ** 2
+
+  // --- 4. Clapper + stem ---
+  const clapR = 0.05
+  const clapper = (u - 0.5) ** 2 + (v - 0.90) ** 2 <= clapR ** 2
+  const stem = u >= 0.49 && u <= 0.51 && v >= 0.80 && v <= 0.865
+
+  return dome || skirt || lip || clapper || stem
+}
+
+/**
+ * Draw one icon.
+ * Rasterize the bell (white) onto a #1a1a1a background, rounded corners.
  */
 function drawIcon(size) {
   const png = new PNG({ width: size, height: size })
-  const stroke = Math.max(3, Math.floor(size * 0.14)) // N leg thickness
-  const inset = Math.floor(size * 0.26)               // N inset from edge
-  const radius = Math.floor(size * 0.18)              // corner rounding
+  const radius = Math.floor(size * 0.18) // corner rounding
 
   const inBounds = (x, y) => {
     const cx = x - size / 2, cy = y - size / 2
@@ -43,25 +69,6 @@ function drawIcon(size) {
     return dx <= 0 && dy <= 0 ? true : (dx * dx + dy * dy) <= radius * radius
   }
 
-  const inN = (x, y) => {
-    // Left leg: x in [inset, inset+stroke], full height
-    if (x >= inset && x <= inset + stroke) return true
-    // Right leg: x in [size-inset-stroke, size-inset], full height
-    if (x >= size - inset - stroke && x <= size - inset) return true
-    // Diagonal stroke: line from (inset,size-inset) to (size-inset,inset),
-    // thickened by rotating the point into the line's frame. We test with a
-    // distance-to-segment check instead (cheaper + clearer).
-    const ax = inset, ay = size - inset
-    const bx = size - inset, by = inset
-    const dx = bx - ax, dy = by - ay
-    const len2 = dx * dx + dy * dy
-    let t = ((x - ax) * dx + (y - ay) * dy) / len2
-    t = Math.max(0, Math.min(1, t))
-    const px = ax + t * dx, py = ay + t * dy
-    const dist2 = (x - px) * (x - px) + (y - py) * (y - py)
-    return dist2 <= (stroke / 2) * (stroke / 2)
-  }
-
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (size * y + x) << 2
@@ -69,10 +76,7 @@ function drawIcon(size) {
         png.data[i] = 0; png.data[i + 1] = 0; png.data[i + 2] = 0; png.data[i + 3] = 0
         continue
       }
-      // Slight gradient: a soft accent glow behind the N.
-      const gx = x / size, gy = y / size
-      const glow = 0.06 - 0.10 * ((gx - 0.5) * (gx - 0.5) + (gy - 0.5) * (gy - 0.5))
-      const c = inN(x, y) ? FG : { r: BG.r + ACCENT.r * glow, g: BG.g + ACCENT.g * glow, b: BG.b + ACCENT.b * glow }
+      const c = inBell(x / size, y / size) ? FG : BG
       png.data[i] = c.r; png.data[i + 1] = c.g; png.data[i + 2] = c.b; png.data[i + 3] = 255
     }
   }
@@ -87,3 +91,17 @@ for (const [name, size] of [['icon-512.png', 512], ['icon-192.png', 192], ['appl
   writeFileSync(join(outDir, name), PNG.sync.write(png))
   console.log(`wrote ${name} (${size}x${size})`)
 }
+
+/*
+ * Bell geometry reference:
+ *
+ *              dome (circle)
+ *           .-----------.
+ *          /             \
+ *         |               |  skirt (flared
+ *         |               |   trapezoid)
+ *         \               /
+ *          \_____________/   <- lip (capsule)
+ *                |
+ *               (o)          <- clapper
+ */

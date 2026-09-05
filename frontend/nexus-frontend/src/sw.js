@@ -1,5 +1,5 @@
 /**
- * sw.js — the NEXUS service worker (source).
+ * sw.js — the CUE service worker (source).
  *
  * vite-plugin-pwa uses the "injectManifest" strategy: this file is the REAL
  * service worker, and the plugin compiles it + injects the precache manifest
@@ -38,7 +38,7 @@ self.addEventListener('push', (event) => {
     data = {} // malformed payload — show a generic notification
   }
 
-  const title = data.title || 'NEXUS'
+  const title = data.title || 'CUE'
   const options = {
     body: data.body,
     icon: '/icons/icon-192.png',
@@ -73,7 +73,7 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil((async () => {
     const openWindows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
 
-    // If an NEXUS tab is already open, focus it and navigate to the target,
+    // If an CUE tab is already open, focus it and navigate to the target,
     // instead of spawning a duplicate window.
     for (const client of openWindows) {
       if (client.url === targetHref && 'focus' in client) {
@@ -81,7 +81,7 @@ self.addEventListener('notificationclick', (event) => {
       }
     }
 
-    // Prefer navigating an existing NEXUS tab over opening a new window.
+    // Prefer navigating an existing CUE tab over opening a new window.
     for (const client of openWindows) {
       if ('navigate' in client) {
         try {

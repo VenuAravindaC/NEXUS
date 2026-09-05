@@ -13,6 +13,8 @@ function ProfilePage() {
 
     // Push notification state: what the browser reports about permissions
     const [notifStatus, setNotifStatus] = useState('unsupported')
+    // Ephemeral status message shown after toggling (auto-clears after 4s)
+    const [notifMessage, setNotifMessage] = useState(null)
 
     // On load, read the CURRENT permission state (granted / denied / default).
     useEffect(() => {
@@ -21,13 +23,34 @@ function ProfilePage() {
         }
     }, [isLoaded])
 
+    // Clear the status message after 4 seconds (every new message resets the timer)
+    useEffect(() => {
+        if (!notifMessage) return
+        const t = setTimeout(() => setNotifMessage(null), 4_000)
+        return () => clearTimeout(t)
+    }, [notifMessage])
+
     const handleToggleNotifications = async () => {
-        if (notifStatus === 'granted') {
-            const result = await unsubscribeFromPush(user.id)
-            if (result.ok) setNotifStatus('default')
-        } else {
-            const result = await subscribeToPush(user.id)
-            if (result.ok) setNotifStatus('granted')
+        try {
+            if (notifStatus === 'granted') {
+                const result = await unsubscribeFromPush(user.id)
+                if (result.ok) {
+                    setNotifStatus('default')
+                    setNotifMessage('Notifications turned off.')
+                } else {
+                    setNotifMessage(`Failed: ${result.error}`)
+                }
+            } else {
+                const result = await subscribeToPush(user.id)
+                if (result.ok) {
+                    setNotifStatus('granted')
+                    setNotifMessage('Notifications enabled!')
+                } else {
+                    setNotifMessage(`Failed: ${result.error}`)
+                }
+            }
+        } catch (err) {
+            setNotifMessage(`Unexpected error: ${err.message}`)
         }
     }
 
@@ -174,8 +197,13 @@ function ProfilePage() {
                                 ? 'Time reminders fire as system notifications.'
                                 : notifStatus === 'denied'
                                     ? 'Permission blocked by the browser. Enable it in your site settings to turn notifications back on.'
-                                    : 'Get notified when a reminder is due, even if NEXUS is closed.'}
+                                    : 'Get notified when a reminder is due, even if CUE is closed.'}
                         </p>
+                        {notifMessage && (
+                            <p className={`text-xs text-center mt-2 ${notifMessage.startsWith('Failed') ? 'text-red-400' : 'text-green-400'}`}>
+                                {notifMessage}
+                            </p>
+                        )}
                     </div>
                 )}
 
