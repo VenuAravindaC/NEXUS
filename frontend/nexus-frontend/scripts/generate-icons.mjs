@@ -2,7 +2,7 @@
  * generate-icons.mjs — one-off PWA icon generator.
  *
  * Creates public/icons/{icon-192,icon-512,apple-touch-icon}.png from the
- * CUE brand palette (#1a1a1a bg) + a simple white bell.
+ * CUE brand palette (#1a1a1a bg) + the CUE "ping" mark.
  *
  * Run: node scripts/generate-icons.mjs
  * Then you can delete this script (it's a dev tool, not app code).
@@ -17,45 +17,55 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const BG = { r: 26, g: 26, b: 26 }    // #1a1a1a — app background
-const FG = { r: 255, g: 255, b: 255 } // white — the bell
+const FG = { r: 255, g: 255, b: 255 } // white — the ping mark
 
 /**
- * Is a normalized point (u, v) in [0,1]² inside the bell?
+ * Is a normalized point (u, v) in [0,1]² inside the CUE "ping" mark?
  *
- * The bell is a union of simple shapes (see the doc comment at the bottom
- * for the geometry sketch):
- *   1. dome      — a circle for the rounded top
- *   2. skirt     — a flared trapezoid that widens toward the bottom
- *   3. lip       — a capsule (rounded bar) at the bottom rim
- *   4. clapper   — a tiny circle hanging below, on a thin stem
+ * The mark is a radar / sonar pulse: a bright source dot in the center with
+ * concentric arcs radiating outward — "your cue has arrived." It's a signal,
+ * not a bell. Geometry (see sketch at the bottom):
+ *   1. source — a filled circle at the center
+ *   2. arcs   — three concentric rings radiating outward
+ *   3. sweep  — a wedge left open at the bottom so the rings read as a live
+ *               radar sweep, not static closed rings
  */
-function inBell(u, v) {
-  // --- 1. Dome: circle centered at (0.50, 0.42), radius 0.26 ---
-  const dome = (u - 0.5) ** 2 + (v - 0.42) ** 2 <= 0.26 ** 2
+function inPing(u, v) {
+  const cx = 0.5, cy = 0.5
+  const dx = u - cx, dy = v - cy
+  const dist = Math.hypot(dx, dy)
 
-  // --- 2. Skirt: flared trapezoid, v in [0.42, 0.72],
-  //        half-width grows 0.26 -> 0.34 ---
-  const skirtT = 0.42, skirtB = 0.72, wT = 0.26, wB = 0.34
-  const skirt = v >= skirtT && v <= skirtB
-    && Math.abs(u - 0.5) <= wT + (wB - wT) * (v - skirtT) / (skirtB - skirtT)
+  // Angle of this point around the source. Screen y grows downward, so the
+  // "bottom" (+dy direction) is angle π/2 — that's where the sweep gap sits.
+  const angle = Math.atan2(dy, dx)
 
-  // --- 3. Lip: capsule centered at (0.5, 0.75), half-length 0.40,
-  //        tube radius 0.055 ---
-  const lipY = 0.75, lipHalf = 0.40, lipR = 0.055
-  const lipClampX = Math.max(0.5 - lipHalf, Math.min(0.5 + lipHalf, u))
-  const lip = (v - lipY) ** 2 + (u - lipClampX) ** 2 <= lipR ** 2
+  // Wrap (angle - π/2) into [-π, π] so |·| is the true angular distance.
+  let diff = angle - Math.PI / 2
+  while (diff > Math.PI) diff -= 2 * Math.PI
+  while (diff < -Math.PI) diff += 2 * Math.PI
 
-  // --- 4. Clapper + stem ---
-  const clapR = 0.05
-  const clapper = (u - 0.5) ** 2 + (v - 0.90) ** 2 <= clapR ** 2
-  const stem = u >= 0.49 && u <= 0.51 && v >= 0.80 && v <= 0.865
+  // The sweep gap: a ~57° wedge (half-width 0.5 rad) left open at the bottom.
+  const gapHalf = 0.5
+  const inGap = Math.abs(diff) < gapHalf
 
-  return dome || skirt || lip || clapper || stem
+  // 1. Source — a filled center dot (always full, never interrupted by the gap).
+  if (dist <= 0.06) return true
+
+  // 2. Arcs — three concentric rings radiating outward, skipping the gap.
+  const arcs = [
+    { r: 0.15, t: 0.032 },
+    { r: 0.27, t: 0.032 },
+    { r: 0.39, t: 0.032 },
+  ]
+  for (const { r, t } of arcs) {
+    if (!inGap && Math.abs(dist - r) <= t / 2) return true
+  }
+  return false
 }
 
 /**
  * Draw one icon.
- * Rasterize the bell (white) onto a #1a1a1a background, rounded corners.
+ * Rasterize the ping mark (white) onto a #1a1a1a background, rounded corners.
  */
 function drawIcon(size) {
   const png = new PNG({ width: size, height: size })
@@ -76,7 +86,7 @@ function drawIcon(size) {
         png.data[i] = 0; png.data[i + 1] = 0; png.data[i + 2] = 0; png.data[i + 3] = 0
         continue
       }
-      const c = inBell(x / size, y / size) ? FG : BG
+      const c = inPing(x / size, y / size) ? FG : BG
       png.data[i] = c.r; png.data[i + 1] = c.g; png.data[i + 2] = c.b; png.data[i + 3] = 255
     }
   }
@@ -93,15 +103,18 @@ for (const [name, size] of [['icon-512.png', 512], ['icon-192.png', 192], ['appl
 }
 
 /*
- * Bell geometry reference:
+ * CUE "ping" geometry reference:
  *
- *              dome (circle)
- *           .-----------.
- *          /             \
- *         |               |  skirt (flared
- *         |               |   trapezoid)
- *         \               /
- *          \_____________/   <- lip (capsule)
- *                |
- *               (o)          <- clapper
+ *              __________
+ *            /            \     <- outer arc (r=0.39)
+ *           |              |
+ *         _/      __      \_
+ *        /      _/  \_      \   <- middle arc (r=0.27)
+ *       |     _/      \_    |
+ *       |   _/    •    \_   |   <- inner arc (r=0.15) + source dot
+ *        \_/              \_/
+ *          \______________/     <- gap open at the bottom (radar sweep)
+ *
+ * A source dot with rings radiating outward, like a sonar ping sent out
+ * when it's time — the cue has arrived.
  */
