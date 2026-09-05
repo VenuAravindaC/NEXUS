@@ -90,7 +90,7 @@ function DashboardPage() {
         resetForm()
     }
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!title.trim()) return
         const isLocation = reminderType === 'location'
 
@@ -114,14 +114,13 @@ function DashboardPage() {
         }
 
         // Knock on the door — the notebook DECIDES, we just listen
-        const result = editingId
+        // await because addReminder/editReminder are now async (they call the API)
+        const result = await (editingId
             ? editReminder(editingId, reminderData)
             : addReminder({
-                id: Date.now().toString(),
                 ...reminderData,
                 isDone: false,
-                createdAt: new Date().toISOString()
-            })
+            }))
 
         if (!result.ok) {
             setSaveError(result.error) // the door refused — show 🚫 + message

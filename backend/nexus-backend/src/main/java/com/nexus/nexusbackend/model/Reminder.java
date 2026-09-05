@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -87,9 +88,14 @@ public class Reminder {
     /**
      * Has the user marked this reminder as done?
      * "is_done" in the DB column; false by default.
+     *
+     * @JsonProperty forces Jackson to serialize this as "isDone" in JSON.
+     * Without it, Lombok's boolean getter isDone() makes Jackson serialize it as "done"
+     * (it strips the "is" prefix) — which breaks the frontend expecting "isDone".
      */
     @Column(name = "is_done", nullable = false)
     @Builder.Default
+    @JsonProperty("isDone")
     private boolean isDone = false;
 
     /**

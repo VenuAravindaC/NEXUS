@@ -1,9 +1,10 @@
-import { createContext, useContext, useReducer } from 'react'
+import { createContext, useContext, useReducer, useEffect } from 'react'
+import { useUser } from '@clerk/react'
 
 /**
  * Reminder shape (the "notebook" holds a list of these):
  * {
- *   id: string,
+ *   id: string (UUID from DB),
  *   title: string,
  *   type: "time" | "location",
  *   remindAt: string | null,          // UTC timestamp for time-based
@@ -16,6 +17,9 @@ import { createContext, useContext, useReducer } from 'react'
  * }
  */
 
+// The backend URL — set VITE_API_URL=http://localhost:8080 in .env.local
+const API_URL = import.meta.env.VITE_API_URL
+
 // The shared table. Pages that call useReminders() subscribe to this.
 const RemindersContext = createContext(null)
 
@@ -26,6 +30,10 @@ const RemindersContext = createContext(null)
  */
 function remindersReducer(state, action) {
   switch (action.type) {
+    // 'load' replaces the whole list — used on startup to hydrate from the server
+    case 'load':
+      return { ...state, reminders: action.payload }
+
     case 'add':
       return { ...state, reminders: [...state.reminders, action.payload] }
 
@@ -65,17 +73,32 @@ function remindersReducer(state, action) {
 /**
  * The Provider: holds the notebook (useReducer) and gives every page
  * a tidy interface. This is where ALL reminder state lives now.
+ *
+ * Now fetch-backed: on mount, loads reminders from the backend.
+ * Every CRUD action calls the API and updates local state on success.
  */
 export function RemindersProvider({ children }) {
+  const { user, isLoaded } = useUser()  // get the logged-in user from Clerk
   const [state, dispatch] = useReducer(remindersReducer, {
     reminders: [],
     editingId: null,
   })
 
+  /**
+   * Load reminders from the backend when the user is known.
+   * Runs once when isLoaded becomes true and user is available.
+   */
+  useEffect(() => {
+    if (!isLoaded || !user) return  // wait until Clerk knows who's logged in
+
+    fetch(`${API_URL}/api/reminders?userId=${user.id}`)
+      .then(res => res.json())
+      .then(data => dispatch({ type: 'load', payload: data }))
+      .catch(err => console.error('Failed to load reminders:', err))
+  }, [isLoaded, user])  // re-run if user changes (e.g. after login)
+
   // The guard (the door guard). One pure function checks EVERY rule a reminder
-  // must satisfy before it's allowed in — time reminders can't be in the past,
-  // and location reminders must have a spot picked. Lives here so every page
-  // that walks through this door is covered. Returns an error string or null.
+  // must satisfy before it's allowed in. Lives here so every page is covered.
   const validationError = (reminder) => {
     if (
       reminder.type === 'time' &&
@@ -98,23 +121,89 @@ export function RemindersProvider({ children }) {
     editingId: state.editingId,
 
     // Each door returns { ok, error } — the page listens for the verdict.
-    addReminder: (reminder) => {
+    addReminder: async (reminder) => {
       const err = validationError(reminder)
       if (err) return { ok: false, error: err }
-      dispatch({ type: 'add', payload: reminder })
-      return { ok: true }
+
+      try {
+        const res = await fetch(`${API_URL}/api/reminders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...reminder, userId: user.id }),
+        })
+        if (!res.ok) return { ok: false, error: 'Failed to save reminder' }
+        const saved = await res.json()  // server returns the saved reminder with real UUID
+        dispatch({ type: 'add', payload: saved })
+        return { ok: true }
+      } catch {
+        return { ok: false, error: 'Network error' }
+      }
     },
 
-    toggleDone: (id) => dispatch({ type: 'toggle', payload: { id } }),
+    toggleDone: async (id) => {
+      const reminder = state.reminders.find(r => r.id === id)
+      if (!reminder) return
 
-    editReminder: (id, changes) => {
+      // Optimistic update — flip immediately so the UI feels instant
+      dispatch({ type: 'toggle', payload: { id } })
+
+      try {
+        const res = await fetch(`${API_URL}/api/reminders/${id}?userId=${user.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...reminder, isDone: !reminder.isDone }),
+        })
+        if (!res.ok) {
+          // Server failed — roll back the optimistic update
+          dispatch({ type: 'toggle', payload: { id } })
+        }
+      } catch (err) {
+        // Network error — roll back
+        dispatch({ type: 'toggle', payload: { id } })
+        console.error('Failed to toggle reminder:', err)
+      }
+    },
+
+    editReminder: async (id, changes) => {
       const err = validationError(changes)
       if (err) return { ok: false, error: err }
-      dispatch({ type: 'edit', payload: { id, changes } })
-      return { ok: true }
+
+      const reminder = state.reminders.find(r => r.id === id)
+      if (!reminder) return { ok: false, error: 'Reminder not found' }
+
+      try {
+        const res = await fetch(`${API_URL}/api/reminders/${id}?userId=${user.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...reminder, ...changes }),
+        })
+        if (!res.ok) return { ok: false, error: 'Failed to update reminder' }
+        const updated = await res.json()
+        dispatch({ type: 'edit', payload: { id, changes: updated } })
+        return { ok: true }
+      } catch {
+        return { ok: false, error: 'Network error' }
+      }
     },
 
-    deleteReminder: (id) => dispatch({ type: 'delete', payload: { id } }),
+    deleteReminder: async (id) => {
+      // Optimistic update — remove immediately so the UI feels instant
+      dispatch({ type: 'delete', payload: { id } })
+
+      try {
+        const res = await fetch(`${API_URL}/api/reminders/${id}?userId=${user.id}`, {
+          method: 'DELETE',
+        })
+        if (!res.ok) {
+          // Server failed — reload from server to restore correct state
+          const data = await fetch(`${API_URL}/api/reminders?userId=${user.id}`).then(r => r.json())
+          dispatch({ type: 'load', payload: data })
+        }
+      } catch (err) {
+        console.error('Failed to delete reminder:', err)
+      }
+    },
+
     startEdit: (id) => dispatch({ type: 'startEdit', payload: { id } }),
     stopEdit: () => dispatch({ type: 'stopEdit' }),
   }
