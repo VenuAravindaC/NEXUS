@@ -35,4 +35,15 @@ public interface ReminderRepository extends JpaRepository<Reminder, UUID> {
      * all start from "get everything for this user", then filter in the frontend.
      */
     List<Reminder> findByUserId(String userId);
+
+    /**
+     * Count how many reminders a user already has.
+     * JPA reads "countBy" + "UserId" and generates:
+     *   SELECT COUNT(*) FROM reminders WHERE user_id = ?
+     *
+     * Used by the Service to enforce the per-user limit (MAX_REMINDERS).
+     * Counting instead of loading the list is cheaper — the DB just returns
+     * one number instead of a whole set of rows.
+     */
+    long countByUserId(String userId);
 }

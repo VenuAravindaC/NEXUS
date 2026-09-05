@@ -20,6 +20,9 @@ import { useUser } from '@clerk/react'
 // The backend URL — set VITE_API_URL=http://localhost:8080 in .env.local
 const API_URL = import.meta.env.VITE_API_URL
 
+// Hard limit per user — prevents DB abuse. Keep in sync with backend.
+const MAX_REMINDERS = 25
+
 // The shared table. Pages that call useReminders() subscribe to this.
 const RemindersContext = createContext(null)
 
@@ -32,7 +35,7 @@ function remindersReducer(state, action) {
   switch (action.type) {
     // 'load' replaces the whole list — used on startup to hydrate from the server
     case 'load':
-      return { ...state, reminders: action.payload }
+      return { ...state, reminders: action.payload, isLoading: false }
 
     case 'add':
       return { ...state, reminders: [...state.reminders, action.payload] }
@@ -85,6 +88,7 @@ export function RemindersProvider({ children }) {
   const [state, dispatch] = useReducer(remindersReducer, {
     reminders: [],
     editor: null, // null | { mode:'create' } | { mode:'edit', id }
+    isLoading: true, // true until first fetch completes
   })
 
   /**
@@ -122,11 +126,17 @@ export function RemindersProvider({ children }) {
   const value = {
     reminders: state.reminders,
     editor: state.editor,
+    isLoading: state.isLoading,
 
     // Each door returns { ok, error } — the page listens for the verdict.
     addReminder: async (reminder) => {
       const err = validationError(reminder)
       if (err) return { ok: false, error: err }
+
+      // Hard limit — reject before hitting the API
+      if (state.reminders.length >= MAX_REMINDERS) {
+        return { ok: false, error: `Limit reached: max ${MAX_REMINDERS} reminders` }
+      }
 
       try {
         const res = await fetch(`${API_URL}/api/reminders`, {
