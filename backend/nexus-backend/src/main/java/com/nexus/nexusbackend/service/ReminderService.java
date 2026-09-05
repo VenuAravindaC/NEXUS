@@ -5,6 +5,7 @@ import com.nexus.nexusbackend.repository.ReminderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -77,6 +78,14 @@ public class ReminderService {
                     existing.setLocationName(updates.getLocationName());
                     existing.setRadius(updates.getRadius());
                     existing.setDone(updates.isDone());
+
+                    // Re-arm: if the user rescheduled this to a FUTURE time,
+                    // clear the fired flag so the scheduler notifies again.
+                    // (If remindAt became null, switching to a location reminder,
+                    // we leave fired as-is — the geofence system is separate.)
+                    if (updates.getRemindAt() != null && updates.getRemindAt().isAfter(Instant.now())) {
+                        existing.setFired(false);
+                    }
                     return reminderRepository.save(existing);
                 });
     }

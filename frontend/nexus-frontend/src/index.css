@@ -3,3 +3,12 @@ body{
     background-color: #1a1a1a;
     color: #ffffff;
 }
+
+/* Slide-down entrance animation for notification banners */
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-1rem); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slideDown {
+    animation: slideDown 0.25s ease-out;
+}

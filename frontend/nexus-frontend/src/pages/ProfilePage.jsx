@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUser, useClerk } from '@clerk/react'
-import { User, LogOut, Mail, Camera, X, Check } from 'lucide-react'
+import { User, LogOut, Mail, Camera, X, Check, Bell, BellOff } from 'lucide-react'
+import { isNotificationSupported, getPermissionState, subscribeToPush, unsubscribeFromPush } from '../lib/push'
 
 function ProfilePage() {
     const { user, isLoaded } = useUser()
@@ -9,6 +10,26 @@ function ProfilePage() {
     // Local edit state for the name field
     const [isEditingName, setIsEditingName] = useState(false)
     const [editName, setEditName] = useState('')
+
+    // Push notification state: what the browser reports about permissions
+    const [notifStatus, setNotifStatus] = useState('unsupported')
+
+    // On load, read the CURRENT permission state (granted / denied / default).
+    useEffect(() => {
+        if (isLoaded && isNotificationSupported()) {
+            setNotifStatus(getPermissionState())
+        }
+    }, [isLoaded])
+
+    const handleToggleNotifications = async () => {
+        if (notifStatus === 'granted') {
+            const result = await unsubscribeFromPush(user.id)
+            if (result.ok) setNotifStatus('default')
+        } else {
+            const result = await subscribeToPush(user.id)
+            if (result.ok) setNotifStatus('granted')
+        }
+    }
 
     // When user loads or signs in, prefill the edit field
     useEffect(() => {
@@ -134,7 +155,31 @@ function ProfilePage() {
                 </p>
             </div>
 
-            {/* Logout button */}
+            {/* Notifications toggle (hidden if the browser can't do push) */}
+                {isNotificationSupported() && (
+                    <div className="max-w-md mx-auto mb-8">
+                        <button
+                            onClick={handleToggleNotifications}
+                            className={`w-full font-medium py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${
+                                notifStatus === 'granted'
+                                    ? 'bg-[#2a2a2a] text-white border border-gray-700'
+                                    : 'bg-white text-black hover:bg-gray-200'
+                            }`}
+                        >
+                            {notifStatus === 'granted' ? <Bell size={20} /> : <BellOff size={20} />}
+                            Notifications {notifStatus === 'granted' ? 'On' : 'Off'}
+                        </button>
+                        <p className={`text-xs text-center mt-2 ${notifStatus !== 'denied' ? 'text-gray-500' : 'text-red-400'}`}>
+                            {notifStatus === 'granted'
+                                ? 'Time reminders fire as system notifications.'
+                                : notifStatus === 'denied'
+                                    ? 'Permission blocked by the browser. Enable it in your site settings to turn notifications back on.'
+                                    : 'Get notified when a reminder is due, even if NEXUS is closed.'}
+                        </p>
+                    </div>
+                )}
+
+                {/* Logout button */}
             <div className="max-w-md mx-auto">
                 <button
                     onClick={handleLogout}

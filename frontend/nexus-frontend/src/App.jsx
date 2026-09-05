@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import UpcomingPage from './pages/UpcomingPage'
 import ProfilePage from './pages/ProfilePage'
 import CalendarPage from './pages/CalendarPage'
+import GeofenceWatcher from './components/GeofenceWatcher'
 import { RemindersProvider } from './store/reminders'
 
 function App() {
@@ -12,6 +13,8 @@ function App() {
     <BrowserRouter>
       {/* Mounted ONCE, above the routes, so reminder state survives navigation */}
       <RemindersProvider>
+        {/* Side-effect component: watches GPS for location reminder geofences */}
+        <GeofenceWatcher />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/dashboard" element={<Layout><DashBoardPage /></Layout>} />

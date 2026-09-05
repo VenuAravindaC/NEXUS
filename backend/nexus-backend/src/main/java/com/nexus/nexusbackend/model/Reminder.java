@@ -99,6 +99,22 @@ public class Reminder {
     private boolean isDone = false;
 
     /**
+     * Has the scheduler already fired this reminder?
+     * The scheduler runs every 60s and asks "which reminders are due?"
+     * This flag stops it from re-sending the same reminder each minute.
+     *
+     * false -> not fired yet (the scheduler should pick it up)
+     * true  -> already notified (leave it alone)
+     *
+     * When the user edits a reminder and reschedules it to a FUTURE time,
+     * ReminderService clears this back to false ("re-arm") so it fires again.
+     * Jackson serializes this as "fired" automatically (plain boolean field name).
+     */
+    @Column(name = "fired", nullable = false)
+    @Builder.Default
+    private boolean fired = false;
+
+    /**
      * When was this reminder created?
      * Set once on creation — never updated (updatable = false).
      * Instant = UTC timestamp.

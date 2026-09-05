@@ -1,13 +1,17 @@
 import { NavLink } from 'react-router-dom'
 import { Home, Clock, Calendar, User } from 'lucide-react'
 import ReminderForm from './ReminderForm'
+import NotificationBanner from './NotificationBanner'
 
 // Pure layout: renders its child page + the bottom nav.
 // ReminderForm is mounted HERE, once, so any page — or a future push
 // notification's "Reschedule" — can open the editor from anywhere.
+// NotificationBanner sits above everything: it shows push + geofence alerts
+// when the app is open.
 function Layout({ children }) {
   return (
     <div className="min-h-screen flex flex-col">
+      <NotificationBanner />
       <div className="flex-1">
         {children}
       </div>

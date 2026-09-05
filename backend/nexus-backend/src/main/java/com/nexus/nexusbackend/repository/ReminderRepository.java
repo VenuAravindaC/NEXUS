@@ -2,8 +2,11 @@ package com.nexus.nexusbackend.repository;
 
 import com.nexus.nexusbackend.model.Reminder;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -46,4 +49,18 @@ public interface ReminderRepository extends JpaRepository<Reminder, UUID> {
      * one number instead of a whole set of rows.
      */
     long countByUserId(String userId);
+
+    /**
+     * Find all TIME reminders that are due right now and haven't fired yet.
+     * The scheduler calls this every 60 seconds.
+     *
+     * This one can't be a derived query (the condition "remindAt <= now AND
+     * fired = false" needs a real WHERE clause), so we write the JPQL by hand.
+     * JPQL works on Java objects (Reminder), not SQL tables:
+     *   r.type = 'time'   → only time-based reminders (location ones fire in-app)
+     *   r.remindAt <= :now → the moment has arrived
+     *   r.fired = false    → we haven't told the user yet
+     */
+    @Query("SELECT r FROM Reminder r WHERE r.type = 'time' AND r.remindAt <= :now AND r.fired = false")
+    List<Reminder> findDueReminders(@Param("now") Instant now);
 }
