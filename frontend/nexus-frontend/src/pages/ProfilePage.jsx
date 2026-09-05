@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useUser, useClerk } from '@clerk/react'
-import { User, LogOut, Mail, Camera, X, Check, Bell, BellOff } from 'lucide-react'
+import { LogOut, Mail, Pen, X, Check, Bell, BellOff } from 'lucide-react'
 import { useNotifications } from '../store/notifications'
 
 function ProfilePage() {
@@ -10,6 +10,7 @@ function ProfilePage() {
     // Local edit state for the name field
     const [isEditingName, setIsEditingName] = useState(false)
     const [editName, setEditName] = useState('')
+    const [editError, setEditError] = useState(null)
 
     // Permission + the enable/disable actions come from NotificationsProvider.
     // This page keeps only the ephemeral after-toggle confirmation message —
@@ -46,17 +47,28 @@ function ProfilePage() {
     }, [isLoaded, user])
 
     const handleSaveName = async () => {
-        if (!editName.trim()) return
+        const name = editName.trim()
+        if (!name) return
         try {
-            await user.updateProfile({ firstName: editName.trim() })
+            // Clerk stores first + last name separately (fullName is derived).
+            // Split on the last space: "Venu Aravind" → firstName "Venu", lastName "Aravind".
+            const lastSpace = name.lastIndexOf(' ')
+            const firstName = lastSpace === -1 ? name : name.slice(0, lastSpace)
+            const lastName = lastSpace === -1 ? '' : name.slice(lastSpace + 1)
+            await user.update({ firstName, lastName })
+            setEditError(null)
             setIsEditingName(false)
         } catch (err) {
+            // Surface the failure in the UI instead of only console.log — silent
+            // failures are exactly how the bug you found stayed invisible.
+            setEditError("Couldn't save your name. Try again.")
             console.error('Failed to update name:', err)
         }
     }
 
     const handleCancelEdit = () => {
         setEditName(user?.fullName || user?.firstName || '')
+        setEditError(null)
         setIsEditingName(false)
     }
 
@@ -119,18 +131,19 @@ function ProfilePage() {
                     </span>
                     {!isEditingName && (
                         <button
-                            onClick={() => setIsEditingName(true)}
+                            onClick={() => { setEditError(null); setIsEditingName(true) }}
                             className="text-gray-400 hover:text-white p-1"
                             aria-label="Edit name"
                         >
-                            <Camera size={18} />
+                            <Pen size={18} />
                         </button>
                     )}
                 </div>
 
                 {/* Inline name edit */}
                 {isEditingName && (
-                    <div className="flex items-center gap-2 mt-2">
+                    <>
+                        <div className="flex items-center gap-2 mt-2">
                         <input
                             type="text"
                             value={editName}
@@ -153,6 +166,10 @@ function ProfilePage() {
                             <X size={18} />
                         </button>
                     </div>
+                    {editError && (
+                        <p className="text-xs text-red-400 mt-1">Couldn't save your name. Try again.</p>
+                    )}
+                    </>
                 )}
 
                 {/* Email */}

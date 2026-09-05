@@ -1,0 +1,177 @@
+/* lesson.css — shared stylesheet for all CUE teaching lessons.
+   One consistent look across the course. Tufte-ish: serif headings,
+   generous whitespace, restrained colour, one accent. */
+
+:root {
+  --ink: #1a1a1a;
+  --muted: #6b7280;
+  --paper: #fafaf9;
+  --card: #ffffff;
+  --line: #e7e5e4;
+  --accent: #0f766e;      /* teal — calm, technical */
+  --accent-soft: #ccfbf1;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --good: #15803d;
+  --good-soft: #dcfce7;
+  --bad: #b91c1c;
+  --bad-soft: #fee2e2;
+  --code-bg: #f4f4f5;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.65;
+  font-size: 17px;
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 3.5rem 1.5rem 6rem;
+}
+
+h1, h2, h3 {
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+h1 { font-size: 2.1rem; margin: 0 0 0.4rem; }
+h2 { font-size: 1.5rem; margin: 2.5rem 0 0.75rem; }
+h3 { font-size: 1.15rem; margin: 1.8rem 0 0.5rem; }
+
+p { margin: 0.9rem 0; }
+ul, ol { margin: 0.9rem 0; padding-left: 1.4rem; }
+li { margin: 0.35rem 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+pre {
+  background: #0f172a;      /* dark code blocks */
+  color: #e2e8f0;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  padding: 1.1rem 1.3rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1.2rem 0;
+}
+pre code { background: none; padding: 0; color: inherit; }
+
+/* ---- components ---- */
+
+.lede {
+  font-size: 1.15rem;
+  color: var(--muted);
+  max-width: 60ch;
+}
+
+.meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1.3rem 1.5rem;
+  margin: 1.4rem 0;
+}
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+
+.callout { border-left: 4px solid var(--accent); }
+.callout--warn { border-left-color: var(--warn); }
+.callout--good { border-left-color: var(--good); }
+.callout--bad  { border-left-color: var(--bad); }
+
+.callout .tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  margin-bottom: 0.4rem;
+}
+.callout--warn .tag { background: var(--warn-soft); color: var(--warn); }
+.callout--good .tag { background: var(--good-soft); color: var(--good); }
+.callout--bad  .tag { background: var(--bad-soft);  color: var(--bad); }
+
+/* step / hop diagram */
+.hops { list-style: none; padding: 0; margin: 1.6rem 0; counter-reset: hop; }
+.hops > li {
+  counter-increment: hop;
+  position: relative;
+  padding: 0.9rem 1.2rem 0.9rem 3.4rem;
+  margin: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.hops > li + li { margin-top: -1px; border-top-left-radius: 0; border-top-right-radius: 0; }
+.hops > li:first-of-type { border-radius: 10px 10px 0 0; }
+.hops > li:last-of-type  { border-radius: 0 0 10px 10px; }
+.hops > li::before {
+  content: counter(hop);
+  position: absolute;
+  left: 1.1rem; top: 0.95rem;
+  width: 1.5rem; height: 1.5rem;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+}
+.hops .who { font-weight: 700; }
+.hops .loc { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+
+/* quiz */
+.quiz { margin: 1.6rem 0; }
+.quiz details {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.9rem 1.2rem;
+  margin: 0.6rem 0;
+}
+.quiz summary { cursor: pointer; font-weight: 600; }
+.quiz details[open] summary { margin-bottom: 0.5rem; }
+.quiz .answer {
+  background: var(--good-soft);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.92rem;
+}
+
+.footer {
+  margin-top: 3.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.95rem;
+  color: var(--muted);
+}

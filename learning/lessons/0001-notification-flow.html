@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lesson 0001 — How a CUE notification actually travels</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+<main>
+
+  <h1>How a CUE notification actually travels</h1>
+  <p class="meta">Lesson 0001 · the full push flow, end to end</p>
+
+  <p class="lede">
+    You built this. Now let's understand it. By the end you'll be able to
+    trace <em>exactly</em> what happens between "I created a reminder" and
+    "a notification pops up" — and why it does (or doesn't) appear.
+  </p>
+
+  <div class="card callout callout--warn">
+    <span class="tag">The big idea first</span>
+    <p>
+      Forget computers for a second. <strong>Web Push works exactly like a
+      postal mailbox.</strong> Once you've got that picture, every file in
+      your codebase clicks into place.
+    </p>
+  </div>
+
+  <h2>The mailbox analogy</h2>
+
+  <p>
+    When you turn on notifications, the browser asks a <strong>push provider</strong>
+    (Google for Chrome, Mozilla for Firefox) for a mailbox. The provider gives
+    back an <strong>address</strong> — a long URL. We store that address on our
+    backend.
+  </p>
+
+  <p>
+    Later, when a reminder is due, the backend <strong>posts a letter</strong>
+    to that address. The provider holds the mailbox, so it receives the letter
+    even though our app might be <em>completely closed</em>. It then wakes up
+    the one thing that can read the letter on this device: the
+    <strong>service worker</strong>. The service worker turns the letter into
+    a system notification.
+  </p>
+
+  <ul>
+    <li><strong>Mailbox address</strong> = the subscription's <code>endpoint</code> URL</li>
+    <li><strong>Lock on the mailbox</strong> = the <code>p256dh</code> + <code>auth</code> keys (only this device can open it)</li>
+    <li><strong>Postal clerk</strong> = the push provider (Google/Mozilla/Apple)</li>
+    <li><strong>Mailbox owner's agent who wakes up</strong> = the service worker</li>
+    <li><strong>The letter</strong> = the JSON payload: title, body, url</li>
+  </ul>
+
+  <h2>The journey, in 7 hops</h2>
+
+  <ol class="hops">
+    <li>
+      <span class="who">User toggles notifications ON</span>
+      <div class="loc">frontend/nexus-frontend/src/lib/push.js</div>
+      <p>
+        <code>subscribeToPush(userId)</code> asks the browser for permission,
+        then calls the push provider and says <em>"I want a mailbox"</em>.
+        The provider returns a subscription (the address + the lock).
+      </p>
+    </li>
+    <li>
+      <span class="who">Frontend stores the mailbox address on the backend</span>
+      <div class="loc">push.js → fetch POST → PushSubscriptionController → PushSubscriptionService</div>
+      <p>
+        The subscription's <code>endpoint</code>, <code>p256dh</code>, and
+        <code>auth</code> get saved to the <code>push_subscriptions</code>
+        table in Postgres. Now the backend knows <em>where</em> to send to
+        this device — and we have the lock key to encrypt to it.
+      </p>
+    </li>
+    <li>
+      <span class="who">The scheduler ticks (every 60 seconds)</span>
+      <div class="loc">ReminderScheduler.fireDueReminders() — enabled by @EnableScheduling in NexusBackendApplication</div>
+      <p>
+        Like a postman checking his rounds. It asks the database:
+        <em>"which time reminders are past due, and haven't fired yet?"</em>
+      </p>
+      <pre><code>@Scheduled(fixedRate = 60_000)
+public void fireDueReminders() {
+    List&lt;Reminder&gt; due = reminderRepository.findDueReminders(now);
+    ...
+}</code></pre>
+    </li>
+    <li>
+      <span class="who">Scheduler posts the letter</span>
+      <div class="loc">ReminderScheduler → PushSender (interface) → WebPushSender</div>
+      <p>
+        For each due reminder, it calls <code>pushSender.send(...)</code>.
+        It does <em>not</em> care how sending works — it just hands over the
+        user, title, body, and a route. That's the <code>PushSender</code>
+        interface: the scheduler only knows <em>what</em> to send, not <em>how</em>.
+      </p>
+    </li>
+    <li>
+      <span class="who">WebPushSender looks up the device and locks the letter</span>
+      <div class="loc">WebPushSender.send()</div>
+      <p>
+        It finds every mailbox (subscription) this user owns, then encrypts the
+        letter so <em>only that device</em> can open it. The encryption uses the
+        device's <code>p256dh</code> + <code>auth</code> keys — your VAPID
+        private key signs it, proving to the provider that <em>your app</em>
+        (not some random server) is allowed to mail this address.
+      </p>
+    </li>
+    <li>
+      <span class="who">Provider delivers to the service worker</span>
+      <div class="loc">the push provider → frontend/nexus-frontend/src/sw.js</div>
+      <p>
+        The provider holds the mailbox. It receives the letter and wakes up
+        the service worker — even if the app tab is closed. The service
+        worker's <code>push</code> event fires.
+      </p>
+      <pre><code>self.addEventListener('push', (event) =&gt; {
+  event.waitUntil((async () =&gt; {
+    await self.registration.showNotification(title, options)
+    ...
+  })())
+})</code></pre>
+    </li>
+    <li>
+      <span class="who">The system notification appears</span>
+      <div class="loc">sw.js → browser notification</div>
+      <p>
+        <code>showNotification</code> pops the alert. If an app tab is already
+        open, the service worker also posts a message to it so the in-app
+        banner shows too. When you click the notification, the
+        <code>notificationclick</code> event opens the right page.
+      </p>
+    </li>
+  </ol>
+
+  <h2>Why the scheduler lives on the backend (not the frontend)</h2>
+
+  <p>
+    This is a great interview answer. Time reminders must fire even when the
+    user has <em>closed their browser</em>. A frontend timer can't do that —
+    it dies with the tab. The backend keeps a single clock, so two tabs never
+    fire the same reminder twice, and it has one source of truth for
+    "has this fired?" (the <code>fired</code> flag).
+  </p>
+
+  <h2>So… why doesn't it fire on my laptop?</h2>
+
+  <div class="card callout callout--good">
+    <span class="tag">The honest answer</span>
+    <p>
+      <strong>Your code is probably correct.</strong> The most likely culprit is
+      that <strong>desktop Chrome on <code>localhost</code> is notoriously
+      unreliable for push</strong> — it often suppresses or delays push from
+      <code>http://localhost</code> for power and UX reasons. Push is designed
+      for <strong>HTTPS + real devices</strong>. That's exactly your deploy
+      target (Vercel + mobile). So "nothing on my laptop" does <em>not</em>
+      mean it's broken.
+    </p>
+  </div>
+
+  <h2>Your task: check each link in the chain</h2>
+
+  <p>
+    Instead of trusting me, <strong>verify it yourself.</strong> The chain has
+    ~6 links, and each one can break independently. When a notification
+    doesn't arrive, walk this checklist:
+  </p>
+
+  <ol>
+    <li><strong>Is the backend even running?</strong> If not, no scheduler tick → no letters. (This is the #1 cause.)</li>
+    <li><strong>Is the service worker registered?</strong> DevTools → Application → Service Workers. If no SW, push can't be received.</li>
+    <li><strong>Is there a subscription in Postgres?</strong> If <code>push_subscriptions</code> is empty, the backend has no address to mail to.</li>
+    <li><strong>Is the reminder due and unfired?</strong> Check <code>remindAt &lt;= now</code> and <code>fired = false</code>.</li>
+    <li><strong>Are the VAPID keys the same on frontend AND backend?</strong> A mismatch = provider rejects the letter.</li>
+    <li><strong>Did the user grant permission?</strong> If <code>Notification.permission</code> isn't <code>granted</code>, nothing shows.</li>
+  </ol>
+
+  <div class="card callout callout--warn">
+    <span class="tag">Checkpoint — grill yourself</span>
+    <p>Before moving on, answer these in your head (say them out loud):</p>
+    <ul>
+      <li>Where does the "mailbox address" get stored? <em>(Hop 2 — Postgres)</em></li>
+      <li>What wakes up when a push arrives? <em>(The service worker, even if the tab is closed)</em></li>
+      <li>Why can't a frontend timer do the scheduler's job? <em>(It dies with the tab)</em></li>
+      <li>What does the VAPID key prove? <em>(That your app, not any server, may send to this mailbox)</em></li>
+    </ul>
+  </div>
+
+  <div class="card callout callout--good">
+    <span class="tag">Checkpoint — do it</span>
+    <p>
+      In your terminal, when the backend is running, check the scheduler log.
+      Create a reminder 2 minutes in the future, then watch the backend log
+      for <code>"Firing N due reminder(s)"</code>. If you see it, the backend
+      half of the chain works. If not, the reminder isn't reaching a due state.
+    </p>
+  </div>
+
+  <div class="footer">
+    <p>
+      <strong>Recommended reading:</strong>
+      <a href="https://web.dev/articles/push-notifications-how-push-works" target="_blank" rel="noopener">web.dev — How Push Works</a>
+      and the
+      <a href="https://developer.mozilla.org/en-US/docs/Web/API/Push_API" target="_blank" rel="noopener">MDN Push API</a>
+      docs. Both are the high-trust references for this exact flow.
+    </p>
+    <p>
+      Questions? Ask your agent (Claude) — that's me. If any hop here is fuzzy,
+      say so and I'll re-explain that hop differently, or we'll zoom into one file.
+    </p>
+  </div>
+
+</main>
+</body>
+</html>
