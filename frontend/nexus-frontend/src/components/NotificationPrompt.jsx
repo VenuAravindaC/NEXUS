@@ -13,18 +13,23 @@
  *      reinstalled.
  *   3. Subtle, not blocking. A banner at the top, not a modal.
  *
+ * This widget does NOT own permission state — it reads permission + enable()
+ * from NotificationsProvider (store/notifications.jsx) and only owns its own
+ * transient UI (loading / success / error / hidden). The benefit: toggling
+ * notifications in Profile flips the SAME permission fact, so this banner
+ * disappears instantly instead of drifting out of sync until next remount.
+ *
  * Mounted inside Layout, above NotificationBanner.
  */
 
 import { useState, useEffect } from 'react'
 import { Bell, X } from 'lucide-react'
-import { useUser } from '@clerk/react'
-import { isNotificationSupported, subscribeToPush } from '../lib/push'
+import { useNotifications } from '../store/notifications'
 
 const DISMISSED_KEY = 'cue-notif-prompt-dismissed'
 
 function NotificationPrompt() {
-    const { user, isLoaded } = useUser()
+    const { permission, enable } = useNotifications()
     // 'hidden' = don't show (dismissed, unsupported, or already granted)
     // 'idle'   = banner visible, waiting for user to click Enable
     // 'loading'= subscribing in progress
@@ -33,12 +38,18 @@ function NotificationPrompt() {
     const [status, setStatus] = useState('hidden')
 
     useEffect(() => {
-        if (!isLoaded || !user) return
-
-        // If permission already granted or denied — nothing to prompt.
-        if (!isNotificationSupported()) return
-        const perm = Notification.permission
-        if (perm !== 'default') return
+        // React BOTH ways (this is the whole point of shared state):
+        //  - permission leaves 'default' → hide (enabled here, enabled in
+        //    Profile, or denied) — don't nag behind the user's back.
+        //  - permission returns to 'default' → offer the banner again.
+        //
+        // One exception: right after WE enable (status === 'success'), the
+        // permission flip is the result of our own click. Don't steal the
+        // green confirmation — it auto-dismisses on its own 3s timer.
+        if (permission !== 'default') {
+            if (status !== 'success') setStatus('hidden')
+            return
+        }
 
         // If user dismissed this prompt before — don't nag.
         try {
@@ -48,7 +59,7 @@ function NotificationPrompt() {
         }
 
         setStatus('idle')
-    }, [isLoaded, user])
+    }, [permission])
 
     // After success, auto-dismiss the banner after 3 seconds.
     useEffect(() => {
@@ -59,7 +70,7 @@ function NotificationPrompt() {
 
     const handleEnable = async () => {
         setStatus('loading')
-        const result = await subscribeToPush(user.id)
+        const result = await enable()
         if (result.ok) {
             setStatus('success')
         } else {

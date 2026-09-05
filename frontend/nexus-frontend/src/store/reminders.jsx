@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useEffect } from 'react'
 import { useUser } from '@clerk/react'
+import { API_URL, fetchReminders } from '../services/api'
 
 /**
  * Reminder shape (the "notebook" holds a list of these):
@@ -16,9 +17,6 @@ import { useUser } from '@clerk/react'
  *   createdAt: string                 // UTC timestamp
  * }
  */
-
-// The backend URL — set VITE_API_URL=http://localhost:8080 in .env.local
-const API_URL = import.meta.env.VITE_API_URL
 
 // Hard limit per user — prevents DB abuse. Keep in sync with backend.
 const MAX_REMINDERS = 25
@@ -98,8 +96,7 @@ export function RemindersProvider({ children }) {
   useEffect(() => {
     if (!isLoaded || !user) return  // wait until Clerk knows who's logged in
 
-    fetch(`${API_URL}/api/reminders?userId=${user.id}`)
-      .then(res => res.json())
+    fetchReminders(user.id)
       .then(data => dispatch({ type: 'load', payload: data }))
       .catch(err => console.error('Failed to load reminders:', err))
   }, [isLoaded, user])  // re-run if user changes (e.g. after login)
@@ -209,7 +206,7 @@ export function RemindersProvider({ children }) {
         })
         if (!res.ok) {
           // Server failed — reload from server to restore correct state
-          const data = await fetch(`${API_URL}/api/reminders?userId=${user.id}`).then(r => r.json())
+          const data = await fetchReminders(user.id)
           dispatch({ type: 'load', payload: data })
         }
       } catch (err) {

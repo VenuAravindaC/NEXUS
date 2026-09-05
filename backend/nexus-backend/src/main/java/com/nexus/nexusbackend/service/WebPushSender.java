@@ -2,7 +2,7 @@ package com.nexus.nexusbackend.service;
 
 import com.nexus.nexusbackend.config.VapidConfig;
 import com.nexus.nexusbackend.model.PushSubscription;
-import com.nexus.nexusbackend.repository.PushSubscriptionRepository;
+import com.nexus.nexusbackend.service.PushSubscriptionService;
 import lombok.extern.slf4j.Slf4j;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
@@ -25,29 +25,34 @@ import java.util.List;
  * How it works:
  * 1. Read VAPID keys from VapidConfig (env vars).
  * 2. Initialize the PushService with the keys + BC provider (for ECDH crypto).
- * 3. On send(): look up every device subscription → build a Notification
- *    (the provider delivers it; the browser wakes up and shows the alert).
- * 4. If the provider says "410 Gone" → that subscription is dead, remove it.
+ * 3. On send(): look up every device subscription via PushSubscriptionService
+ *    (the adapter seam) → build a Notification for each.
+ * 4. If the provider says "410 Gone" → that subscription is dead, remove it
+ *    through the service (not the repository directly).
  * 5. Any error on a single device is logged and skipped (best-effort fan-out).
  *
  * BouncyCastle: needed for the Elliptic Curve Diffie-Hellman that encrypts
  * the payload. Without it, PushService throws NoSuchProviderException: "BC".
  * We register the provider in the constructor (runs once at app startup).
+ *
+ * Subscription lookup and cleanup go through PushSubscriptionService (the seam),
+ * NOT the repository directly. That way the subscription module owns all
+ * subscription logic — the sender stays a pure "encrypt + post" adapter.
  */
 @Slf4j
 @Service
 public class WebPushSender implements PushSender {
 
-    private final PushSubscriptionRepository pushSubscriptionRepository;
+    private final PushSubscriptionService pushSubscriptionService;
     private final PushService pushService;
 
     /**
      * Spring creates this class once (singleton) and injects VapidConfig
-     * (which read the env vars) and PushSubscriptionRepository.
+     * (which read the env vars) and PushSubscriptionService.
      */
     public WebPushSender(VapidConfig vapidConfig,
-                         PushSubscriptionRepository pushSubscriptionRepository) throws GeneralSecurityException {
-        this.pushSubscriptionRepository = pushSubscriptionRepository;
+                         PushSubscriptionService pushSubscriptionService) throws GeneralSecurityException {
+        this.pushSubscriptionService = pushSubscriptionService;
 
         // Register BouncyCastle — required for the ECDH key derivation inside
         // the web-push encryption. Adding it once at startup is sufficient.
@@ -74,7 +79,7 @@ public class WebPushSender implements PushSender {
      */
     @Override
     public void send(String userId, String title, String body, String route) {
-        List<PushSubscription> subscriptions = pushSubscriptionRepository.findByUserId(userId);
+        List<PushSubscription> subscriptions = pushSubscriptionService.getSubscriptionsForUser(userId);
         if (subscriptions.isEmpty()) return;
 
         String payload = buildPayload(title, body, route);
@@ -92,8 +97,9 @@ public class WebPushSender implements PushSender {
                 if (status == 410) {
                     // 410 Gone — the push provider says this device mailbox is dead
                     // (user cleared browser data, or re-subscribed with new keys).
+                    // Let the subscription service handle the cleanup.
                     log.info("Removing stale push subscription (410 Gone): {}", sub.getEndpoint());
-                    pushSubscriptionRepository.delete(sub);
+                    pushSubscriptionService.removeSubscription(sub.getEndpoint(), sub.getUserId());
                 } else if (status >= 400) {
                     log.warn("Push delivery failed (HTTP {}): {}", status, sub.getEndpoint());
                 }

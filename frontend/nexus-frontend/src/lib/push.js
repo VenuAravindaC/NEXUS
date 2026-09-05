@@ -16,7 +16,8 @@
  * + this subscription and sends it through the provider.
  */
 
-const API_URL = import.meta.env.VITE_API_URL
+import { API_URL } from '../services/api'
+
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
 
 /**

@@ -12,13 +12,12 @@ import java.util.UUID;
  * The Repository — the ONLY layer that talks to the database.
  *
  * By extending JpaRepository<PushSubscription, UUID> we get all basic
- * operations for free (same as ReminderRepository). We add three derived queries:
+ * operations for free (same as ReminderRepository). We add two derived queries:
  *
  *   findByUserId(userId)   → SELECT * FROM push_subscriptions WHERE user_id = ?
  *                            (used by the scheduler to find a user's device mailboxes)
  *   findByEndpoint(endpoint) → SELECT * ... WHERE endpoint = ?
  *                            (used for the upsert check — same device re-subscribing)
- *   deleteByEndpoint(endpoint) → DELETE ... WHERE endpoint = ?
  */
 @Repository
 public interface PushSubscriptionRepository extends JpaRepository<PushSubscription, UUID> {
@@ -34,10 +33,4 @@ public interface PushSubscriptionRepository extends JpaRepository<PushSubscripti
      * Used to decide "is this a new device, or the same one re-subscribing?"
      */
     Optional<PushSubscription> findByEndpoint(String endpoint);
-
-    /**
-     * Remove a subscription by its endpoint.
-     * Used to clean up a stale mailbox (the push provider answered 410 Gone).
-     */
-    void deleteByEndpoint(String endpoint);
 }

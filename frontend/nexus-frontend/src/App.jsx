@@ -8,6 +8,7 @@ import ProfilePage from './pages/ProfilePage'
 import CalendarPage from './pages/CalendarPage'
 import GeofenceWatcher from './components/GeofenceWatcher'
 import { RemindersProvider } from './store/reminders'
+import { NotificationsProvider } from './store/notifications'
 
 /**
  * Route guard: if the user isn't signed in, redirect to /login.
@@ -35,19 +36,22 @@ function App() {
     <BrowserRouter>
       {/* Mounted ONCE, above the routes, so reminder state survives navigation */}
       <RemindersProvider>
-        {/* Side-effect component: watches GPS for location reminder geofences */}
-        <GeofenceWatcher />
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* Owns the single source of truth for notification permission */}
+        <NotificationsProvider>
+          {/* Side-effect component: watches GPS for location reminder geofences */}
+          <GeofenceWatcher />
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* Protected routes — only accessible when signed in.
-              RequireAuth redirects to /login if not authenticated. */}
-          <Route path="/dashboard" element={<RequireAuth><Layout><DashBoardPage /></Layout></RequireAuth>} />
-          <Route path="/upcoming" element={<RequireAuth><Layout><UpcomingPage /></Layout></RequireAuth>} />
-          <Route path="/calendar" element={<RequireAuth><Layout><CalendarPage /></Layout></RequireAuth>} />
-          <Route path="/settings" element={<RequireAuth><Layout><ProfilePage /></Layout></RequireAuth>} />
-        </Routes>
+            {/* Protected routes — only accessible when signed in.
+                RequireAuth redirects to /login if not authenticated. */}
+            <Route path="/dashboard" element={<RequireAuth><Layout><DashBoardPage /></Layout></RequireAuth>} />
+            <Route path="/upcoming" element={<RequireAuth><Layout><UpcomingPage /></Layout></RequireAuth>} />
+            <Route path="/calendar" element={<RequireAuth><Layout><CalendarPage /></Layout></RequireAuth>} />
+            <Route path="/settings" element={<RequireAuth><Layout><ProfilePage /></Layout></RequireAuth>} />
+          </Routes>
+        </NotificationsProvider>
       </RemindersProvider>
     </BrowserRouter>
   )

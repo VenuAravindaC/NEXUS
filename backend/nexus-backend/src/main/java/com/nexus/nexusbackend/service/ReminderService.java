@@ -3,6 +3,7 @@ package com.nexus.nexusbackend.service;
 import com.nexus.nexusbackend.model.Reminder;
 import com.nexus.nexusbackend.repository.ReminderRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -18,7 +19,13 @@ import java.util.UUID;
  *
  * Why? Same reason we put the past-time guard in the frontend notebook, not in each page:
  * one place for the rules → no duplication → easy to change later.
+ *
+ * The fired lifecycle lives here:
+ *   - fireDueReminders() sets fired = true (called by the scheduler)
+ *   - updateReminder() re-arms fired = false on reschedule
+ * One class owns the whole lifecycle → locality.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("null") // Spring Data JPA's @NonNull annotations cause false positives with Eclipse null-analysis
@@ -34,6 +41,7 @@ public class ReminderService {
     public static final int MAX_REMINDERS = 25;
 
     private final ReminderRepository reminderRepository;
+    private final PushSender pushSender;
 
     /**
      * Get all reminders for a specific user.
@@ -42,6 +50,30 @@ public class ReminderService {
      */
     public List<Reminder> getRemindersForUser(String userId) {
         return reminderRepository.findByUserId(userId);
+    }
+
+    /**
+     * Fire all due reminders: send push + mark fired.
+     *
+     * The scheduler calls this every 60 seconds. It owns the whole lifecycle:
+     *   1. Find time reminders that are past due and haven't fired yet
+     *   2. Send a push to each user's devices (via PushSender)
+     *   3. Set fired = true so they don't fire again
+     *
+     * On reschedule (updateReminder), fired = false is re-armed — one class
+     * owns both sides of the lifecycle.
+     */
+    public void fireDueReminders() {
+        Instant now = Instant.now();
+        List<Reminder> due = reminderRepository.findDueReminders(now);
+        if (due.isEmpty()) return;
+
+        log.info("Firing {} due reminder(s)", due.size());
+        for (Reminder r : due) {
+            pushSender.send(r.getUserId(), "NEXUS Reminder", r.getTitle(), "/dashboard");
+            r.setFired(true);
+            reminderRepository.save(r);
+        }
     }
 
     /**

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useUser, useClerk } from '@clerk/react'
 import { User, LogOut, Mail, Camera, X, Check, Bell, BellOff } from 'lucide-react'
-import { isNotificationSupported, getPermissionState, subscribeToPush, unsubscribeFromPush } from '../lib/push'
+import { useNotifications } from '../store/notifications'
 
 function ProfilePage() {
     const { user, isLoaded } = useUser()
@@ -11,17 +11,11 @@ function ProfilePage() {
     const [isEditingName, setIsEditingName] = useState(false)
     const [editName, setEditName] = useState('')
 
-    // Push notification state: what the browser reports about permissions
-    const [notifStatus, setNotifStatus] = useState('unsupported')
-    // Ephemeral status message shown after toggling (auto-clears after 4s)
+    // Permission + the enable/disable actions come from NotificationsProvider.
+    // This page keeps only the ephemeral after-toggle confirmation message —
+    // the shared module owns the permission fact itself.
+    const { permission, isSupported, enable, disable } = useNotifications()
     const [notifMessage, setNotifMessage] = useState(null)
-
-    // On load, read the CURRENT permission state (granted / denied / default).
-    useEffect(() => {
-        if (isLoaded && isNotificationSupported()) {
-            setNotifStatus(getPermissionState())
-        }
-    }, [isLoaded])
 
     // Clear the status message after 4 seconds (every new message resets the timer)
     useEffect(() => {
@@ -32,22 +26,12 @@ function ProfilePage() {
 
     const handleToggleNotifications = async () => {
         try {
-            if (notifStatus === 'granted') {
-                const result = await unsubscribeFromPush(user.id)
-                if (result.ok) {
-                    setNotifStatus('default')
-                    setNotifMessage('Notifications turned off.')
-                } else {
-                    setNotifMessage(`Failed: ${result.error}`)
-                }
+            const turningOff = permission === 'granted'
+            const result = turningOff ? await disable() : await enable()
+            if (result.ok) {
+                setNotifMessage(turningOff ? 'Notifications turned off.' : 'Notifications enabled!')
             } else {
-                const result = await subscribeToPush(user.id)
-                if (result.ok) {
-                    setNotifStatus('granted')
-                    setNotifMessage('Notifications enabled!')
-                } else {
-                    setNotifMessage(`Failed: ${result.error}`)
-                }
+                setNotifMessage(`Failed: ${result.error}`)
             }
         } catch (err) {
             setNotifMessage(`Unexpected error: ${err.message}`)
@@ -179,23 +163,23 @@ function ProfilePage() {
             </div>
 
             {/* Notifications toggle (hidden if the browser can't do push) */}
-                {isNotificationSupported() && (
+                {isSupported && (
                     <div className="max-w-md mx-auto mb-8">
                         <button
                             onClick={handleToggleNotifications}
                             className={`w-full font-medium py-3 rounded-lg flex items-center justify-center gap-2 transition-colors ${
-                                notifStatus === 'granted'
+                                permission === 'granted'
                                     ? 'bg-[#2a2a2a] text-white border border-gray-700'
                                     : 'bg-white text-black hover:bg-gray-200'
                             }`}
                         >
-                            {notifStatus === 'granted' ? <Bell size={20} /> : <BellOff size={20} />}
-                            Notifications {notifStatus === 'granted' ? 'On' : 'Off'}
+                            {permission === 'granted' ? <Bell size={20} /> : <BellOff size={20} />}
+                            Notifications {permission === 'granted' ? 'On' : 'Off'}
                         </button>
-                        <p className={`text-xs text-center mt-2 ${notifStatus !== 'denied' ? 'text-gray-500' : 'text-red-400'}`}>
-                            {notifStatus === 'granted'
+                        <p className={`text-xs text-center mt-2 ${permission !== 'denied' ? 'text-gray-500' : 'text-red-400'}`}>
+                            {permission === 'granted'
                                 ? 'Time reminders fire as system notifications.'
-                                : notifStatus === 'denied'
+                                : permission === 'denied'
                                     ? 'Permission blocked by the browser. Enable it in your site settings to turn notifications back on.'
                                     : 'Get notified when a reminder is due, even if CUE is closed.'}
                         </p>
