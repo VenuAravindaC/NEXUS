@@ -1,7 +1,18 @@
 import { Check, MoreVertical } from 'lucide-react'
 import { useState } from 'react'
+import { useReminders } from '../store/reminders'
 
-function ReminderCard({ reminder, onToggleDone, onEdit, onDelete }) {
+/**
+ * ReminderCard — pure look, wired through the notebook.
+ *
+ * The card self-wires its three actions (toggle done / edit / delete) through
+ * useReminders() instead of receiving 3 callbacks from every page. Pages just
+ * render <ReminderCard reminder={r} /> — no prop plumbing, nothing to re-wire.
+ *
+ * Edit opens the shared ReminderForm via startEdit(id) — no navigation.
+ */
+function ReminderCard({ reminder }) {
+    const { toggleDone, deleteReminder, startEdit } = useReminders()
     const [menuOpen, setMenuOpen] = useState(false)
 
     const formatDate = (isoString) => {
@@ -20,7 +31,7 @@ function ReminderCard({ reminder, onToggleDone, onEdit, onDelete }) {
             <div className="flex items-center gap-3">
                 {/* Checkbox */}
                 <button
-                    onClick={() => onToggleDone(reminder.id)}
+                    onClick={() => toggleDone(reminder.id)}
                     className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
                         reminder.isDone
                             ? 'bg-white border-white'
@@ -49,7 +60,7 @@ function ReminderCard({ reminder, onToggleDone, onEdit, onDelete }) {
                         <div className="absolute right-0 top-8 bg-[#2a2a2a] rounded-lg shadow-lg py-1 min-w-[100px] z-10">
                             <button
                                 onClick={() => {
-                                    onEdit(reminder.id)
+                                    startEdit(reminder.id)
                                     setMenuOpen(false)
                                 }}
                                 className="w-full text-left px-4 py-2 text-sm hover:bg-[#3a3a3a]"
@@ -58,7 +69,7 @@ function ReminderCard({ reminder, onToggleDone, onEdit, onDelete }) {
                             </button>
                             <button
                                 onClick={() => {
-                                    onDelete(reminder.id)
+                                    deleteReminder(reminder.id)
                                     setMenuOpen(false)
                                 }}
                                 className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-[#3a3a3a]"

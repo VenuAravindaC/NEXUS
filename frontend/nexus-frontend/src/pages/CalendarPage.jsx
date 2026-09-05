@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import ReminderCard from '../components/ReminderCard'
 import { useReminders } from '../store/reminders'
+import { localDateKey, reminderDayKeys, selectDayReminders } from '../store/selectors'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = [
@@ -10,16 +10,8 @@ const MONTHS = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ]
 
-// Turn a Date into a day-key like "2026-09-05" in the user's LOCAL timezone.
-// We use local, not UTC, so a reminder at 23:30 shows up on the day the user meant.
-const localDateKey = (date) => {
-    const pad = (n) => String(n).padStart(2, '0')
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
-
 function CalendarPage() {
-    const { reminders, toggleDone, deleteReminder, startEdit } = useReminders()
-    const navigate = useNavigate()
+    const { reminders } = useReminders()
 
     const today = new Date()
     const [viewYear, setViewYear] = useState(today.getFullYear())
@@ -46,24 +38,15 @@ function CalendarPage() {
     for (let i = 0; i < leadingBlanks; i++) cells.push(null)
     for (let d = 1; d <= daysInMonth; d++) cells.push(d)
 
-    // ALL time-based reminders — done ones included. Done = history, part of
-    // that day's record. (Upcoming is the planner, so it stays active-only.)
-    const timeReminders = reminders.filter(r => r.type === 'time' && r.remindAt)
-    // Set of day-keys that have at least one reminder (drives the little dots)
-    const reminderDays = new Set(timeReminders.map(r => localDateKey(new Date(r.remindAt))))
+    // ALL time-based reminders' local day-keys — done included (history is part
+    // of that day's record). Drives the little dots. Selector-owned.
+    const reminderDays = reminderDayKeys(reminders)
 
-    // Reminders shown in the dropdown for the selected day, earliest first
-    const selectedReminders = timeReminders
-        .filter(r => localDateKey(new Date(r.remindAt)) === selectedDate)
-        .sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt))
+    // Reminders shown for the selected day, earliest first. Selector-owned.
+    const selectedReminders = selectDayReminders(reminders, selectedDate)
 
     const [selYear, selMonth, selDay] = selectedDate.split('-').map(Number)
     const selectedLabel = `${MONTHS[selMonth - 1]} ${selDay}, ${selYear}`
-
-    const handleEdit = (id) => {
-        startEdit(id)          // notebook: "we're editing this one"
-        navigate('/dashboard') // Dashboard's effect opens the prefilled modal
-    }
 
     return (
         <div className="min-h-screen pb-20 p-4 pt-8">
@@ -157,9 +140,6 @@ function CalendarPage() {
                         <ReminderCard
                             key={reminder.id}
                             reminder={reminder}
-                            onToggleDone={() => toggleDone(reminder.id)}
-                            onEdit={() => handleEdit(reminder.id)}
-                            onDelete={() => deleteReminder(reminder.id)}
                         />
                     ))
                 )}

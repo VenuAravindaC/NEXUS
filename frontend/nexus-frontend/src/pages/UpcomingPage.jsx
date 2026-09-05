@@ -1,10 +1,14 @@
 import ReminderCard from '../components/ReminderCard'
 import { useReminders } from '../store/reminders'
-import { useNavigate } from 'react-router-dom'
+import { selectUpcomingReminders } from '../store/selectors'
 
 function UpcomingPage() {
-    const { reminders, toggleDone, deleteReminder, startEdit } = useReminders()
-    const navigate = useNavigate()
+    const { reminders } = useReminders()
+
+    // Future, not-done, time-based — the rule lives in the selector.
+    // Editing now opens the shared ReminderForm IN PLACE (no navigation);
+    // the card self-wires its actions, so the page just renders.
+    const futureReminders = selectUpcomingReminders(reminders)
 
     // Format date for display: "Aug 22" or "Today" / "Tomorrow"
     const formatDateHeader = (dateString) => {
@@ -22,13 +26,7 @@ function UpcomingPage() {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     }
 
-    // Filter: only future reminders (not done, not past)
-    const now = new Date()
-    const futureReminders = reminders
-        .filter(r => !r.isDone && new Date(r.remindAt) >= now)
-        .filter(r => r.type === 'time') // Only time-based reminders for now
-
-    // Group by date (using date portion of remindAt)
+    // Group by date (using date portion of remindAt) — display logic only.
     const grouped = futureReminders.reduce((acc, reminder) => {
         const date = new Date(reminder.remindAt).toISOString().split('T')[0] // "YYYY-MM-DD"
         if (!acc[date]) acc[date] = []
@@ -38,18 +36,6 @@ function UpcomingPage() {
 
     // Sort dates chronologically
     const sortedDates = Object.keys(grouped).sort()
-
-    // Sort reminders within each date by time
-    Object.values(grouped).forEach(list =>
-        list.sort((a, b) => new Date(a.remindAt) - new Date(b.remindAt))
-    )
-
-    const handleEdit = (id) => {
-        // Tell the notebook "we're editing this one"
-        startEdit(id)
-        // Then go to the Dashboard — its effect reads editingId and opens the modal prefilled.
-        navigate('/dashboard')
-    }
 
     return (
         <div className="min-h-screen pb-20 p-4 pt-8">
@@ -78,9 +64,6 @@ function UpcomingPage() {
                                 <ReminderCard
                                     key={reminder.id}
                                     reminder={reminder}
-                                    onToggleDone={() => toggleDone(reminder.id)}
-                                    onEdit={() => handleEdit(reminder.id)}
-                                    onDelete={() => deleteReminder(reminder.id)}
                                 />
                             ))}
                         </div>

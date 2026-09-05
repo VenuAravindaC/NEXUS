@@ -1,14 +1,17 @@
 import { NavLink } from 'react-router-dom'
 import { Home, Clock, Calendar, User } from 'lucide-react'
+import ReminderForm from './ReminderForm'
 
-// Pure layout: just renders its child page + the bottom nav.
-// No state here anymore — reminder data lives in the store (useReminders).
+// Pure layout: renders its child page + the bottom nav.
+// ReminderForm is mounted HERE, once, so any page — or a future push
+// notification's "Reschedule" — can open the editor from anywhere.
 function Layout({ children }) {
   return (
     <div className="min-h-screen flex flex-col">
       <div className="flex-1">
         {children}
       </div>
+      <ReminderForm />
 
       <nav className="fixed bottom-0 left-0 right-0 flex justify-around py-3 bg-[#1a1a1a] border-t border-gray-800">
 

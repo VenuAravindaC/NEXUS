@@ -59,11 +59,14 @@ function remindersReducer(state, action) {
         reminders: state.reminders.filter((r) => r.id !== action.payload.id),
       }
 
-    case 'startEdit':
-      return { ...state, editingId: action.payload.id }
+    // The ReminderForm reads this: null = closed, { mode:'create' } = blank form,
+    // { mode:'edit', id } = prefill from that reminder. Any page — or a future
+    // notification's "Reschedule" — can open the form from anywhere.
+    case 'openEditor':
+      return { ...state, editor: action.payload }
 
-    case 'stopEdit':
-      return { ...state, editingId: null }
+    case 'closeEditor':
+      return { ...state, editor: null }
 
     default:
       return state
@@ -81,7 +84,7 @@ export function RemindersProvider({ children }) {
   const { user, isLoaded } = useUser()  // get the logged-in user from Clerk
   const [state, dispatch] = useReducer(remindersReducer, {
     reminders: [],
-    editingId: null,
+    editor: null, // null | { mode:'create' } | { mode:'edit', id }
   })
 
   /**
@@ -118,7 +121,7 @@ export function RemindersProvider({ children }) {
 
   const value = {
     reminders: state.reminders,
-    editingId: state.editingId,
+    editor: state.editor,
 
     // Each door returns { ok, error } — the page listens for the verdict.
     addReminder: async (reminder) => {
@@ -204,8 +207,9 @@ export function RemindersProvider({ children }) {
       }
     },
 
-    startEdit: (id) => dispatch({ type: 'startEdit', payload: { id } }),
-    stopEdit: () => dispatch({ type: 'stopEdit' }),
+    startCreate: () => dispatch({ type: 'openEditor', payload: { mode: 'create' } }),
+    startEdit: (id) => dispatch({ type: 'openEditor', payload: { mode: 'edit', id } }),
+    stopEdit: () => dispatch({ type: 'closeEditor' }),
   }
 
   return (
