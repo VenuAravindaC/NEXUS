@@ -2,12 +2,27 @@ import ReminderCard from '../components/ReminderCard'
 import { useReminders } from '../store/reminders'
 import { selectUpcomingReminders } from '../store/selectors'
 
-function UpcomingPage() {
-    const { reminders } = useReminders()
+// Skeleton cards — grey bars that match ReminderCard's shape
+function SkeletonCard() {
+    return (
+        <div className="bg-[#242424] rounded-lg p-4 mb-3 animate-pulse">
+            <div className="flex items-center gap-3">
+                <div className="w-6 h-6 rounded-full bg-gray-700" />
+                <div className="h-4 bg-gray-700 rounded w-1/2" />
+                <div className="w-4 h-4 bg-gray-700 rounded ml-auto" />
+            </div>
+            <div className="flex items-center gap-2 mt-3 ml-9">
+                <div className="h-3 bg-gray-700 rounded w-1/4" />
+                <div className="h-3 bg-gray-700 rounded w-12" />
+            </div>
+        </div>
+    )
+}
 
-    // Future, not-done, time-based — the rule lives in the selector.
-    // Editing now opens the shared ReminderForm IN PLACE (no navigation);
-    // the card self-wires its actions, so the page just renders.
+function UpcomingPage() {
+    const { reminders, isLoading } = useReminders()
+
+    // Future, not-done — the rule lives in the selector.
     const futureReminders = selectUpcomingReminders(reminders)
 
     // Format date for display: "Aug 22" or "Today" / "Tomorrow"
@@ -41,7 +56,13 @@ function UpcomingPage() {
         <div className="min-h-screen pb-20 p-4 pt-8">
             <h1 className="text-2xl font-bold mb-6">Upcoming</h1>
 
-            {futureReminders.length === 0 ? (
+            {isLoading ? (
+                <div className="space-y-3">
+                    <SkeletonCard />
+                    <SkeletonCard />
+                    <SkeletonCard />
+                </div>
+            ) : futureReminders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center mt-32 px-8 text-center">
                     <h2 className="text-xl font-semibold mb-2">No upcoming reminders</h2>
                     <p className="text-gray-400">Create a time-based reminder to see it here</p>
