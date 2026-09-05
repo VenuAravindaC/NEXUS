@@ -59,4 +59,6 @@ build/
 # Environment files - NEVER commit secrets
 .env
 .env.local
-application.properties
+# NOTE: application.properties is intentionally NOT ignored anymore.
+# It contains only the ${DATABASE_URL} placeholder (no hardcoded secrets),
+# so it's safe to commit. Actual credentials come from the DATABASE_URL env var.

@@ -38,3 +38,11 @@ target
 .claude
 CLAUDE.md
 INTERVIEW_NOTES.md
+
+# Certificates & keys - NEVER commit these
+*.pem
+*.key
+*.p12
+*.jks
+*.crt
+vapid-keys.json
