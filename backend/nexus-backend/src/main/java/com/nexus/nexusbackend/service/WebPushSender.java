@@ -1,8 +1,8 @@
 package com.nexus.nexusbackend.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.nexusbackend.config.VapidConfig;
 import com.nexus.nexusbackend.model.PushSubscription;
-import com.nexus.nexusbackend.service.PushSubscriptionService;
 import lombok.extern.slf4j.Slf4j;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
@@ -13,7 +13,9 @@ import org.springframework.stereotype.Service;
 
 import java.security.GeneralSecurityException;
 import java.security.Security;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * WebPushSender — the implementation that actually talks to the push provider.
@@ -24,7 +26,7 @@ import java.util.List;
  *
  * How it works:
  * 1. Read VAPID keys from VapidConfig (env vars).
- * 2. Initialize the PushService with the keys + BC provider (for ECDH crypto).
+ * 2. Initialize the PushService via buildPushService() (the factory seam).
  * 3. On send(): look up every device subscription via PushSubscriptionService
  *    (the adapter seam) → build a Notification for each.
  * 4. If the provider says "410 Gone" → that subscription is dead, remove it
@@ -38,6 +40,10 @@ import java.util.List;
  * Subscription lookup and cleanup go through PushSubscriptionService (the seam),
  * NOT the repository directly. That way the subscription module owns all
  * subscription logic — the sender stays a pure "encrypt + post" adapter.
+ *
+ * TESTABILITY: the PushService construction is behind a package-visible
+ * factory method (buildPushService). A test in the same package can override
+ * this and inject a stub, avoiding the real BouncyCastle + network.
  */
 @Slf4j
 @Service
@@ -45,29 +51,43 @@ public class WebPushSender implements PushSender {
 
     private final PushSubscriptionService pushSubscriptionService;
     private final PushService pushService;
+    private final ObjectMapper objectMapper;
 
     /**
      * Spring creates this class once (singleton) and injects VapidConfig
-     * (which read the env vars) and PushSubscriptionService.
+     * (which read the env vars), PushSubscriptionService, and Jackson's
+     * ObjectMapper (auto-configured by spring-boot-starter-web).
+     *
+     * The PushService is built via buildPushService() — the factory seam —
+     * so a test in the same package can override it with a stub.
      */
     public WebPushSender(VapidConfig vapidConfig,
-                         PushSubscriptionService pushSubscriptionService) throws GeneralSecurityException {
+                         PushSubscriptionService pushSubscriptionService,
+                         ObjectMapper objectMapper) {
         this.pushSubscriptionService = pushSubscriptionService;
+        this.objectMapper = objectMapper;
+        this.pushService = buildPushService(vapidConfig);
+    }
 
-        // Register BouncyCastle — required for the ECDH key derivation inside
-        // the web-push encryption. Adding it once at startup is sufficient.
+    /**
+     * The factory seam: builds the real PushService from VAPID credentials.
+     * Package-visible so a test in the same package can override this and
+     * return a stub — making the whole class unit-testable without
+     * BouncyCastle or a real push provider.
+     */
+    PushService buildPushService(VapidConfig vapidConfig) {
         if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
             Security.addProvider(new BouncyCastleProvider());
         }
-
-        // Build the PushService with our VAPID credentials.
-        // The 3-arg constructor is (publicKey, privateKey, subject).
-        // Throws GeneralSecurityException if the keys are malformed.
-        this.pushService = new PushService(
-                vapidConfig.getPublicKey(),
-                vapidConfig.getPrivateKey(),
-                vapidConfig.getSubject()
-        );
+        try {
+            return new PushService(
+                    vapidConfig.getPublicKey(),
+                    vapidConfig.getPrivateKey(),
+                    vapidConfig.getSubject()
+            );
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Failed to initialize push service — check VAPID keys", e);
+        }
     }
 
     /**
@@ -102,6 +122,13 @@ public class WebPushSender implements PushSender {
                     pushSubscriptionService.removeSubscription(sub.getEndpoint(), sub.getUserId());
                 } else if (status >= 400) {
                     log.warn("Push delivery failed (HTTP {}): {}", status, sub.getEndpoint());
+                } else {
+                    // 2xx (usually 201 Created) — the push provider accepted and
+                    // queued the message for delivery. Log it so a scheduled
+                    // notification leaves a trace in the terminal (success used
+                    // to be silent, which made it impossible to tell if a send
+                    // actually happened or was a no-op).
+                    log.info("Push accepted by provider (HTTP {}): {}", status, sub.getEndpoint());
                 }
             } catch (Exception e) {
                 // Best-effort: if one device fails, continue to the next.
@@ -113,18 +140,26 @@ public class WebPushSender implements PushSender {
 
     /**
      * Build the JSON payload the service worker will receive and display.
-     * Simple hand-built JSON (no library needed for three flat strings).
+     *
+     * WHY JACKSON? The previous version hand-escaped backslash and double-quote,
+     * but a title containing a newline, tab, or control character would produce
+     * invalid JSON — the service worker's event.data.json() would fail to parse.
+     * Jackson's ObjectMapper handles all JSON escaping correctly, always.
+     * ObjectMapper is a thread-safe, stateful builder that Spring auto-configures;
+     * we reuse the one singleton it creates.
      */
-    private String buildPayload(String title, String body, String route) {
-        String safeTitle = escapeJson(title);
-        String safeBody = escapeJson(body);
-        String safeRoute = escapeJson(route);
-        return "{\"title\":\"" + safeTitle + "\",\"body\":\"" + safeBody + "\",\"url\":\"" + safeRoute + "\"}";
-    }
-
-    /** Escape the few characters that are illegal inside a JSON string value. */
-    private String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    String buildPayload(String title, String body, String route) {
+        try {
+            Map<String, String> payload = new LinkedHashMap<>();
+            payload.put("title", title != null ? title : "CUE");
+            payload.put("body", body != null ? body : "");
+            payload.put("url", route != null ? route : "/dashboard");
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception e) {
+            // Should never happen — ObjectMapper.writeValueAsString only throws
+            // on streams, not on String builds. Defensive fallback.
+            log.error("Failed to build push payload", e);
+            return "{\"title\":\"CUE\",\"body\":\"\",\"url\":\"/dashboard\"}";
+        }
     }
 }
