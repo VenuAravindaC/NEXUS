@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider} from '@clerk/react'
+import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
 
@@ -14,14 +15,9 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-// Register the service worker (for push + PWA). vite-plugin-pwa injects a
-// tiny bootstrap that fetches/registers our compiled sw.js — but only when
-// the browser supports service workers (double-checking; push.js already
-// guards, but a redundant fallback can't hurt).
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('Service worker registration failed:', err)
-    })
-  })
-}
+// Register the service worker (for push + PWA) through the plugin's virtual
+// module. This is the important part: in DEV the plugin serves the compiled
+// worker at /dev-sw.js (NOT /sw.js — that path would fall through to the SPA
+// and fail with a MIME type error). In PROD it's /sw.js. registerSW() picks
+// the right path for whichever environment we're in, automatically.
+registerSW({ immediate: true })

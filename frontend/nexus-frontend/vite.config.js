@@ -12,7 +12,10 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.js',
-      devOptions: { enabled: true },
+      // injectManifest in dev needs the SW served from a predictable path
+      // Use the generated SW filename directly; devOptions.enabled=true
+      // should serve it, but we also need to ensure the registration path matches
+      devOptions: { enabled: true, navigationPreload: true, type: 'module' },
       manifest: {
         name: 'CUE — Smart Reminders',
         short_name: 'CUE',

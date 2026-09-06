@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, useEffect } from 'react'
 import { useUser, useAuth } from '@clerk/react'
-import { API_URL, fetchReminders, authFetch } from '../services/api'
+import { fetchReminders, authFetch } from '../services/api'
 
 /**
  * Reminder shape (the "notebook" holds a list of these):

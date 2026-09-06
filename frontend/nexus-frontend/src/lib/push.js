@@ -16,7 +16,7 @@
  * + this subscription and sends it through the provider.
  */
 
-import { API_URL } from '../services/api'
+import { authFetch } from '../services/api'
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
 
@@ -104,17 +104,14 @@ export async function subscribeToPush(token) {
         //    nested { endpoint, expirationTime, keys: { p256dh, auth } } shape
         //    the backend's PushSubscriptionRequest record expects.
         const sub = subscription.toJSON()
-        const res = await fetch(`${API_URL}/api/push-subscriptions`, {
+        const res = await authFetch('/api/push-subscriptions', {
+            token,
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
+            body: {
                 // No userId here! The backend pulls it from the verified JWT.
                 endpoint: subscription.endpoint,
                 keys: { p256dh: sub.keys?.p256dh, auth: sub.keys?.auth },
-            }),
+            },
         })
 
         if (!res.ok) {
@@ -137,9 +134,9 @@ export async function unsubscribeFromPush(token) {
 
         // If there's a subscription, tell the backend to forget it.
         if (subscription) {
-            const res = await fetch(`${API_URL}/api/push-subscriptions?endpoint=${encodeURIComponent(subscription.endpoint)}`, {
+            const res = await authFetch(`/api/push-subscriptions?endpoint=${encodeURIComponent(subscription.endpoint)}`, {
+                token,
                 method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` },
             })
             if (!res.ok) {
                 return { ok: false, error: `Backend failed to remove subscription (HTTP ${res.status})` }

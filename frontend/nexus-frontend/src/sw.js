@@ -54,10 +54,12 @@ self.addEventListener('push', (event) => {
 
     // Tell any OPEN page (an app tab) to show an in-app banner too.
     // We can't call the page directly — the page is another thread — but we
-    // CAN send it a message and it decides what to do.
+    // CAN send it a message and it decides what to do. We include the same
+    // deep-link URL the notification carries, so the banner can navigate to
+    // the same place a click on the system notification would.
     const openWindows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     for (const client of openWindows) {
-      client.postMessage({ type: 'push-received', title, body: data.body })
+      client.postMessage({ type: 'push-received', title, body: data.body, url: data.url || '/dashboard' })
     }
   })())
 })

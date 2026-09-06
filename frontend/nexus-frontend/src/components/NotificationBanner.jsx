@@ -18,6 +18,11 @@
  *   - For geofence alerts, there IS no system notification (geofence runs
  *     in-app only), so this is the only visible signal.
  *
+ * Clicking a push banner navigates to the same deep-link URL the system
+ * notification carries — parity between the two surfaces. The service worker
+ * includes { url } in the 'push-received' message; geofence banners have no
+ * URL yet, so their body is not clickable.
+ *
  * Wired into Layout.jsx (mounted once, above {children}).
  */
 
@@ -37,21 +42,25 @@ function NotificationBanner() {
     }, [])
 
     // Listen for two event channels:
-    //   a) 'message' from the service worker (type: 'push-received')
-    //   b) 'geofence-alert' CustomEvent from the location watcher
+    //   a) 'message' from the service worker (type: 'push-received') — carries
+    //      the same { title, body, url } the service worker kept for itself, so
+    //      clicking the banner goes to the same page as clicking the system
+    //      notification.
+    //   b) 'geofence-alert' CustomEvent from the location watcher — in-app only,
+    //      no system notification, so there's no deep-link URL yet.
     useEffect(() => {
         const swHandler = (event) => {
             if (event.data?.type !== 'push-received') return
-            addBanner(event.data.title, event.data.body)
+            addBanner(event.data.title, event.data.body, event.data.url)
         }
 
         const geofenceHandler = (event) => {
             const r = event.detail
-            addBanner('📍 Location Reminder', r.title || 'You have arrived!')
+            addBanner('📍 Location Reminder', r.title || 'You have arrived!', null)
         }
 
-        function addBanner(title, body) {
-            setBanners((prev) => [...prev, { title, body, id: Date.now() }])
+        function addBanner(title, body, url) {
+            setBanners((prev) => [...prev, { title, body, url, id: Date.now() }])
         }
 
         navigator.serviceWorker?.addEventListener?.('message', swHandler)
@@ -82,10 +91,20 @@ function NotificationBanner() {
                     key={b.id}
                     className="pointer-events-auto bg-[#2a2a2a] border border-gray-700 rounded-lg px-4 py-3 shadow-lg flex items-start gap-3 animate-slideDown"
                 >
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{b.title}</p>
-                        {b.body && <p className="text-xs text-gray-400 mt-0.5 truncate">{b.body}</p>}
-                    </div>
+                    {b.url ? (
+                        <button
+                            onClick={() => navigate(b.url)}
+                            className="flex-1 min-w-0 text-left"
+                        >
+                            <p className="text-sm font-semibold text-white truncate">{b.title}</p>
+                            {b.body && <p className="text-xs text-gray-400 mt-0.5 truncate">{b.body}</p>}
+                        </button>
+                    ) : (
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{b.title}</p>
+                            {b.body && <p className="text-xs text-gray-400 mt-0.5 truncate">{b.body}</p>}
+                        </div>
+                    )}
                     <button
                         onClick={() => dismiss(i)}
                         className="text-gray-500 hover:text-white flex-shrink-0 mt-0.5"

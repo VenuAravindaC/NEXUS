@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import ReminderCard from '../components/ReminderCard'
+import SkeletonCard from '../components/SkeletonCard'
 import { useReminders } from '../store/reminders'
 import { localDateKey, reminderDayKeys, selectDayReminders } from '../store/selectors'
 
@@ -9,23 +10,6 @@ const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
 ]
-
-// Skeleton card — grey bars matching ReminderCard's shape, shown while loading
-function SkeletonCard() {
-    return (
-        <div className="bg-[#242424] rounded-lg p-4 mb-3 animate-pulse">
-            <div className="flex items-center gap-3">
-                <div className="w-6 h-6 rounded-full bg-gray-700" />
-                <div className="h-4 bg-gray-700 rounded w-1/2" />
-                <div className="w-4 h-4 bg-gray-700 rounded ml-auto" />
-            </div>
-            <div className="flex items-center gap-2 mt-3 ml-9">
-                <div className="h-3 bg-gray-700 rounded w-1/4" />
-                <div className="h-3 bg-gray-700 rounded w-12" />
-            </div>
-        </div>
-    )
-}
 
 function CalendarPage() {
     const { reminders, isLoading } = useReminders()
