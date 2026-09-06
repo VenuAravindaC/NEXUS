@@ -48,3 +48,7 @@ designs/
 *.jks
 *.crt
 vapid-keys.json
+
+# Session-scoped dev helper scripts (debugging leftovers, not part of the app)
+check-parse.ps1
+start-backend-logged.ps1
