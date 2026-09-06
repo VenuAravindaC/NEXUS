@@ -1,29 +1,42 @@
 /**
  * api.js — the ONE place the frontend knows the backend's address,
- * plus the shared "give me all of this user's reminders" fetch.
+ * plus the shared helpers for talking to it with the user's JWT.
  *
- * Before this module:
- *   - API_URL was defined twice — store/reminders.jsx and lib/push.js.
- *     Two definitions means two places to forget when the URL changes.
- *   - The hydrate fetch was written at mount in reminders.jsx AND re-inlined
- *     inside deleteReminder's rollback path. Two copies of the same query.
- *
- * Now: the URL lives here, and the hydrate lives here. Callers (the store)
- * just call API_URL / fetchReminders(userId).
- *
- * Deliberately small. There's only ONE backend, so a full API-client module
- * with adapters and seams would be premature — that's a hypothetical seam,
- * and "one adapter = hypothetical seam." We keep just what's duplicated today
- * and build more helpers here as the duplication appears.
+ * authFetch is where the bearer token gets attached. Every API call in the
+ * app goes through it: the Clerk token proves WHO the user is, and the backend
+ * (now behind AuthFilter) derives the userId from that token — it stopped
+ * trusting a userId the client just claims in a query param.
  */
 
 export const API_URL = import.meta.env.VITE_API_URL
 
 /**
- * Fetch every reminder belonging to a user, straight from the server.
- * Used to hydrate the app on load, and to re-sync after a delete rolled back.
- * Returns the parsed JSON array (the backend returns [{...}, {...}]).
+ * fetch, but with the signed-in user's Clerk JWT attached as an Authorization
+ * header. Almost every call here is JSON, so that is the default content type.
+ *
+ * @param {string} path  e.g. "/api/reminders" (relative — API_URL is added)
+ * @param {object} opts  { token, method, body } — body is JSON-serialized
  */
-export async function fetchReminders(userId) {
-  return fetch(`${API_URL}/api/reminders?userId=${userId}`).then((res) => res.json())
+export async function authFetch(path, { token, method = 'GET', body } = {}) {
+  const headers = { 'Content-Type': 'application/json' }
+  // No token? Leave the header off — the backend answers 401 and the caller
+  // surfaces that as an error. Better than silently pretending to be someone.
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  return fetch(`${API_URL}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+}
+
+/**
+ * Fetch every reminder belonging to the signed-in user.
+ * Used to hydrate the app on load, and to re-sync after a delete rolled back.
+ *
+ * The backend decides WHICH user from the token — there is no userId query
+ * param anymore, because the client no longer gets to say who they are.
+ */
+export async function fetchReminders(token) {
+  const res = await authFetch('/api/reminders', { token })
+  return res.json()
 }

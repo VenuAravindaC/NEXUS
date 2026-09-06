@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { useUser } from '@clerk/react'
+import { useAuth, useUser } from '@clerk/react'
 import {
     isNotificationSupported,
     getPermissionState,
@@ -28,6 +28,7 @@ const NotificationsContext = createContext(null)
 
 export function NotificationsProvider({ children }) {
     const { user, isLoaded } = useUser()
+    const { getToken } = useAuth()              // mints the JWT we pass to push.js
 
     // 'unsupported' | 'default' | 'granted' | 'denied'
     // Derived from the browser on mount — kept in sync by enable/disable.
@@ -50,7 +51,8 @@ export function NotificationsProvider({ children }) {
 
     const enable = async () => {
         if (!user) return { ok: false, error: 'Not signed in' }
-        const result = await subscribeToPush(user.id)
+        const token = await getToken()   // session JWT — push.js sends it as Bearer
+        const result = await subscribeToPush(token)
         if (result.ok) {
             setPermission('granted')
         }
@@ -59,7 +61,8 @@ export function NotificationsProvider({ children }) {
 
     const disable = async () => {
         if (!user) return { ok: false, error: 'Not signed in' }
-        const result = await unsubscribeFromPush(user.id)
+        const token = await getToken()
+        const result = await unsubscribeFromPush(token)
         if (result.ok) {
             setPermission('default')
         }

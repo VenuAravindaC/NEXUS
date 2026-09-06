@@ -1,7 +1,9 @@
 package com.nexus.nexusbackend.controller;
 
 import com.nexus.nexusbackend.model.PushSubscription;
+import com.nexus.nexusbackend.security.ClerkJwtVerifier;
 import com.nexus.nexusbackend.service.PushSubscriptionService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,11 @@ import org.springframework.web.bind.annotation.*;
  * builds a subscription and the frontend POSTs it here to be stored.
  * When they toggle OFF, the frontend DELETEs it.
  *
+ * SECURITY: same defense as ReminderController. The userId the client sends is
+ * ignored — the real one comes from the verified JWT via
+ * request.getAttribute(ClerkJwtVerifier.USER_ID_ATTRIBUTE). A device can only
+ * ever be registered to the person who owns the token.
+ *
  * A Java record is a compact immutable class — perfect for a request body
  * that has no behavior, just data. The nested {@code Keys} record mirrors
  * the JSON shape the frontend actually sends:
@@ -25,10 +32,14 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/push-subscriptions")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // TODO: tighten to specific Vercel URL before production
 public class PushSubscriptionController {
 
-    /** Request body for POST — matches the frontend's subscribeToPush() payload. */
+    /**
+     * Request body for POST — matches the frontend's subscribeToPush() payload.
+     * userId is KEPT in the DTO but IGNORED on purpose: the trusted value comes
+     * from the JWT. (Kept because the current frontend still sends it; once the
+     * frontend drops it from the payload, this field can go too.)
+     */
     public record PushSubscriptionRequest(String userId, String endpoint, Keys keys) {
         public record Keys(String p256dh, String auth) {}
     }
@@ -42,9 +53,14 @@ public class PushSubscriptionController {
      * (now with a real UUID from the DB).
      */
     @PostMapping
-    public ResponseEntity<PushSubscription> saveSubscription(@RequestBody PushSubscriptionRequest request) {
+    public ResponseEntity<PushSubscription> saveSubscription(
+            @RequestBody PushSubscriptionRequest request,
+            HttpServletRequest httpRequest) {
+
+        String userId = (String) httpRequest.getAttribute(ClerkJwtVerifier.USER_ID_ATTRIBUTE);
+
         PushSubscription sub = PushSubscription.builder()
-                .userId(request.userId())
+                .userId(userId)                     // from the JWT, never from the body
                 .endpoint(request.endpoint())
                 .p256dh(request.keys().p256dh())
                 .auth(request.keys().auth())
@@ -54,7 +70,7 @@ public class PushSubscriptionController {
     }
 
     /**
-     * DELETE /api/push-subscriptions?endpoint=...&userId=...
+     * DELETE /api/push-subscriptions?endpoint=...
      *
      * Removes a subscription (user turned notifications off, or the device
      * unsubscribed). The Service's ownership check returns 404 if the
@@ -64,8 +80,9 @@ public class PushSubscriptionController {
     @DeleteMapping
     public ResponseEntity<Void> deleteSubscription(
             @RequestParam String endpoint,
-            @RequestParam String userId) {
+            HttpServletRequest request) {
 
+        String userId = (String) request.getAttribute(ClerkJwtVerifier.USER_ID_ATTRIBUTE);
         boolean removed = pushSubscriptionService.removeSubscription(endpoint, userId);
         return removed
                 ? ResponseEntity.noContent().build()        // 204 No Content

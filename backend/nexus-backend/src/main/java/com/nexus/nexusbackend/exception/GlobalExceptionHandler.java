@@ -1,5 +1,6 @@
 package com.nexus.nexusbackend.exception;
 
+import com.nexus.nexusbackend.security.InvalidTokenException;
 import com.nexus.nexusbackend.service.ReminderLimitExceededException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +37,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleLimitExceeded(ReminderLimitExceededException e) {
         return ResponseEntity
                 .status(HttpStatus.CONFLICT) // 409
+                .body(Map.of("error", e.getMessage()));
+    }
+
+    /**
+     * Belt-and-suspenders: AuthFilter already turns InvalidTokenException into
+     * a 401 before it can reach any controller. If one ever leaks through
+     * anyway, it still comes out as 401 with the same { "error": "..." } shape
+     * — never a confusing 500.
+     */
+    @ExceptionHandler(InvalidTokenException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidToken(InvalidTokenException e) {
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED) // 401
                 .body(Map.of("error", e.getMessage()));
     }
 }

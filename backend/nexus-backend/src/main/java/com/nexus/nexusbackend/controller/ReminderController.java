@@ -1,7 +1,9 @@
 package com.nexus.nexusbackend.controller;
 
 import com.nexus.nexusbackend.model.Reminder;
+import com.nexus.nexusbackend.security.ClerkJwtVerifier;
 import com.nexus.nexusbackend.service.ReminderService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,34 +24,37 @@ import java.util.UUID;
  * The Controller does NOT contain business logic — it just routes traffic.
  * Rules live in ReminderService.
  *
+ * SECURITY: where does userId come from?
+ *   It USED to ride along in the URL (?userId=...) or request body, which meant
+ *   the client told us who they were. AuthFilter now verifies the Clerk JWT on
+ *   every /api request and stashes the trusted user id on the request:
+ *
+ *     request.getAttribute(ClerkJwtVerifier.USER_ID_ATTRIBUTE)
+ *
+ *   The controller just reads it. "Who am I?" is answered by the verified token,
+ *   never by anything the browser sends.
+ *
  * @RestController = @Controller + @ResponseBody:
  *   every method return value is automatically serialized to JSON.
  * @RequestMapping("/api/reminders"):
  *   every endpoint in this class is prefixed with /api/reminders.
- * @CrossOrigin:
- *   allows the frontend (running on a different origin like localhost:5173
- *   or your Vercel URL) to call this backend. Without this, browsers block
- *   the request (CORS policy). We'll tighten this to specific origins in production.
  */
 @RestController
 @RequestMapping("/api/reminders")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // TODO: tighten to specific Vercel URL before production
 public class ReminderController {
 
     private final ReminderService reminderService;
 
     /**
-     * GET /api/reminders?userId=abc123
+     * GET /api/reminders
      *
-     * Returns all reminders for a user.
+     * Returns all reminders for the signed-in user.
      * The frontend calls this on page load to hydrate the notebook.
-     *
-     * @RequestParam extracts ?userId=... from the URL query string.
-     * ResponseEntity<List<Reminder>> = HTTP response wrapper (lets us set status codes).
      */
     @GetMapping
-    public ResponseEntity<List<Reminder>> getReminders(@RequestParam String userId) {
+    public ResponseEntity<List<Reminder>> getReminders(HttpServletRequest request) {
+        String userId = (String) request.getAttribute(ClerkJwtVerifier.USER_ID_ATTRIBUTE);
         List<Reminder> reminders = reminderService.getRemindersForUser(userId);
         return ResponseEntity.ok(reminders); // 200 OK + the list as JSON
     }
@@ -60,17 +65,22 @@ public class ReminderController {
      * Creates a new reminder.
      * The frontend sends the reminder data as JSON in the request body.
      *
-     * @RequestBody reads the JSON body and converts it to a Reminder object.
+     * Defense in depth: even if the body claims some OTHER userId, we overwrite
+     * it with the verified one. The client never gets to decide who owns a row.
      * Returns 201 Created + the saved reminder (now with a real UUID from the DB).
      */
     @PostMapping
-    public ResponseEntity<Reminder> createReminder(@RequestBody Reminder reminder) {
+    public ResponseEntity<Reminder> createReminder(
+            @RequestBody Reminder reminder,
+            HttpServletRequest request) {
+
+        reminder.setUserId((String) request.getAttribute(ClerkJwtVerifier.USER_ID_ATTRIBUTE));
         Reminder saved = reminderService.createReminder(reminder);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved); // 201 Created
     }
 
     /**
-     * PUT /api/reminders/{id}?userId=abc123
+     * PUT /api/reminders/{id}
      *
      * Updates an existing reminder.
      * {id} is the UUID in the URL — e.g. PUT /api/reminders/550e8400-...
@@ -82,16 +92,17 @@ public class ReminderController {
     @PutMapping("/{id}")
     public ResponseEntity<Reminder> updateReminder(
             @PathVariable UUID id,
-            @RequestParam String userId,
-            @RequestBody Reminder updates) {
+            @RequestBody Reminder updates,
+            HttpServletRequest request) {
 
+        String userId = (String) request.getAttribute(ClerkJwtVerifier.USER_ID_ATTRIBUTE);
         return reminderService.updateReminder(id, userId, updates)
                 .map(ResponseEntity::ok)                        // found + updated → 200 OK
                 .orElse(ResponseEntity.notFound().build());     // not found or wrong user → 404
     }
 
     /**
-     * DELETE /api/reminders/{id}?userId=abc123
+     * DELETE /api/reminders/{id}
      *
      * Deletes a reminder.
      * Returns 204 No Content if deleted (success with no body — standard for DELETE).
@@ -100,8 +111,9 @@ public class ReminderController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteReminder(
             @PathVariable UUID id,
-            @RequestParam String userId) {
+            HttpServletRequest request) {
 
+        String userId = (String) request.getAttribute(ClerkJwtVerifier.USER_ID_ATTRIBUTE);
         boolean deleted = reminderService.deleteReminder(id, userId);
         return deleted
                 ? ResponseEntity.noContent().build()        // 204 No Content

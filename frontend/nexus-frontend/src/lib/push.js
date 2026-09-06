@@ -4,7 +4,7 @@
  * Everything that touches the browser's Notification API, PushManager, or
  * the backend's /api/push-subscriptions endpoint lives here — clean of React,
  * so it can be unit-tested and reused. Components just call
- * subscribeToPush(userId) and get { ok, error }.
+ * subscribeToPush(token) and get { ok, error }.
  *
  * The flow:
  *   1. ask the user for notification permission
@@ -65,7 +65,7 @@ export function getPermissionState() {
  * a 10-second timeout so the function never hangs indefinitely if the
  * service worker failed to register.
  */
-export async function subscribeToPush(userId) {
+export async function subscribeToPush(token) {
     try {
         if (!isNotificationSupported()) {
             return { ok: false, error: 'Push not supported in this browser' }
@@ -106,9 +106,12 @@ export async function subscribeToPush(userId) {
         const sub = subscription.toJSON()
         const res = await fetch(`${API_URL}/api/push-subscriptions`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
             body: JSON.stringify({
-                userId,
+                // No userId here! The backend pulls it from the verified JWT.
                 endpoint: subscription.endpoint,
                 keys: { p256dh: sub.keys?.p256dh, auth: sub.keys?.auth },
             }),
@@ -127,15 +130,16 @@ export async function subscribeToPush(userId) {
  * Turn notifications OFF: unsubscribe on the device AND delete the stored
  * subscription on the backend (so the scheduler stops sending to it).
  */
-export async function unsubscribeFromPush(userId) {
+export async function unsubscribeFromPush(token) {
     try {
         const registration = await navigator.serviceWorker.ready
         const subscription = await registration.pushManager.getSubscription()
 
         // If there's a subscription, tell the backend to forget it.
         if (subscription) {
-            const res = await fetch(`${API_URL}/api/push-subscriptions?endpoint=${encodeURIComponent(subscription.endpoint)}&userId=${encodeURIComponent(userId)}`, {
+            const res = await fetch(`${API_URL}/api/push-subscriptions?endpoint=${encodeURIComponent(subscription.endpoint)}`, {
                 method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
             })
             if (!res.ok) {
                 return { ok: false, error: `Backend failed to remove subscription (HTTP ${res.status})` }

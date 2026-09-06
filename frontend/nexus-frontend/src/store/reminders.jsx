@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, useEffect } from 'react'
-import { useUser } from '@clerk/react'
-import { API_URL, fetchReminders } from '../services/api'
+import { useUser, useAuth } from '@clerk/react'
+import { API_URL, fetchReminders, authFetch } from '../services/api'
 
 /**
  * Reminder shape (the "notebook" holds a list of these):
@@ -78,11 +78,12 @@ function remindersReducer(state, action) {
  * The Provider: holds the notebook (useReducer) and gives every page
  * a tidy interface. This is where ALL reminder state lives now.
  *
- * Now fetch-backed: on mount, loads reminders from the backend.
- * Every CRUD action calls the API and updates local state on success.
+ * Now fetch-backed with JWT auth: on mount, loads reminders from the backend.
+ * Every CRUD action calls the API with the user's token and updates local state on success.
  */
 export function RemindersProvider({ children }) {
-  const { user, isLoaded } = useUser()  // get the logged-in user from Clerk
+  const { user, isLoaded } = useUser()
+  const { getToken } = useAuth()               // <-- getToken is a React hook, only works here
   const [state, dispatch] = useReducer(remindersReducer, {
     reminders: [],
     editor: null, // null | { mode:'create' } | { mode:'edit', id }
@@ -96,9 +97,12 @@ export function RemindersProvider({ children }) {
   useEffect(() => {
     if (!isLoaded || !user) return  // wait until Clerk knows who's logged in
 
-    fetchReminders(user.id)
-      .then(data => dispatch({ type: 'load', payload: data }))
-      .catch(err => console.error('Failed to load reminders:', err))
+    // Mint the fresh token right before the call — short-lived, always current.
+    getToken().then(token => {
+      fetchReminders(token)
+        .then(data => dispatch({ type: 'load', payload: data }))
+        .catch(err => console.error('Failed to load reminders:', err))
+    }).catch(err => console.error('Failed to get auth token:', err))
   }, [isLoaded, user])  // re-run if user changes (e.g. after login)
 
   // The guard (the door guard). One pure function checks EVERY rule a reminder
@@ -136,10 +140,11 @@ export function RemindersProvider({ children }) {
       }
 
       try {
-        const res = await fetch(`${API_URL}/api/reminders`, {
+        const token = await getToken()
+        const res = await authFetch('/api/reminders', {
+          token,
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...reminder, userId: user.id }),
+          body: reminder,              // <-- NO userId! Backend gets it from JWT
         })
         if (!res.ok) return { ok: false, error: 'Failed to save reminder' }
         const saved = await res.json()  // server returns the saved reminder with real UUID
@@ -158,10 +163,11 @@ export function RemindersProvider({ children }) {
       dispatch({ type: 'toggle', payload: { id } })
 
       try {
-        const res = await fetch(`${API_URL}/api/reminders/${id}?userId=${user.id}`, {
+        const token = await getToken()
+        const res = await authFetch(`/api/reminders/${id}`, {
+          token,
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...reminder, isDone: !reminder.isDone }),
+          body: { ...reminder, isDone: !reminder.isDone },
         })
         if (!res.ok) {
           // Server failed — roll back the optimistic update
@@ -182,10 +188,11 @@ export function RemindersProvider({ children }) {
       if (!reminder) return { ok: false, error: 'Reminder not found' }
 
       try {
-        const res = await fetch(`${API_URL}/api/reminders/${id}?userId=${user.id}`, {
+        const token = await getToken()
+        const res = await authFetch(`/api/reminders/${id}`, {
+          token,
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...reminder, ...changes }),
+          body: { ...reminder, ...changes },
         })
         if (!res.ok) return { ok: false, error: 'Failed to update reminder' }
         const updated = await res.json()
@@ -201,12 +208,15 @@ export function RemindersProvider({ children }) {
       dispatch({ type: 'delete', payload: { id } })
 
       try {
-        const res = await fetch(`${API_URL}/api/reminders/${id}?userId=${user.id}`, {
+        const token = await getToken()
+        const res = await authFetch(`/api/reminders/${id}`, {
+          token,
           method: 'DELETE',
         })
         if (!res.ok) {
           // Server failed — reload from server to restore correct state
-          const data = await fetchReminders(user.id)
+          const token2 = await getToken()
+          const data = await fetchReminders(token2)
           dispatch({ type: 'load', payload: data })
         }
       } catch (err) {
