@@ -12,3 +12,20 @@ body{
 .animate-slideDown {
     animation: slideDown 0.25s ease-out;
 }
+
+/* Gentle fade-up for the landing page hero */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(1rem); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .animate-fadeIn,
+    .animate-slideDown {
+        animation: none;
+    }
+}

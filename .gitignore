@@ -38,6 +38,8 @@ target
 .claude
 CLAUDE.md
 INTERVIEW_NOTES.md
+learning/
+designs/
 
 # Certificates & keys - NEVER commit these
 *.pem

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@clerk/react'
 import LoginPage from './pages/LoginPage'
+import LandingPage from './pages/LandingPage'
 import DashBoardPage from './pages/DashboardPage'
 import Layout from './components/Layout'
 import UpcomingPage from './pages/UpcomingPage'
@@ -42,7 +43,9 @@ function App() {
           <GeofenceWatcher />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            {/* Public landing page: signed-out visitors see the storefront,
+                signed-in users get bounced straight to the dashboard */}
+            <Route path="/" element={<LandingPage />} />
 
             {/* Protected routes — only accessible when signed in.
                 RequireAuth redirects to /login if not authenticated. */}
