@@ -26,8 +26,24 @@ public class CorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        // Read allowed origins from environment variable (comma-separated for multiple).
+        // Falls back to localhost:5173 for local dev when the env var isn't set.
+        //
+        // WHY ENV VAR? In production the frontend lives on a different domain
+        // (e.g. Vercel). Hardcoding localhost:5173 would block all live requests.
+        // The CORS_ALLOWED_ORIGINS env var is set in docker-compose.yml, Render,
+        // or wherever this backend runs.
+        //
+        // WHY NOT "*"?
+        // When allowCredentials(true) is set (needed for Authorization header),
+        // the browser REJECTS a wildcard origin — it's a security feature.
+        String origins = System.getenv("CORS_ALLOWED_ORIGINS");
+        if (origins == null || origins.isBlank()) {
+            origins = "http://localhost:5173"; // dev fallback
+        }
+
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:5173") // ← must match Vite's dev port
+                .allowedOrigins(origins.split(","))
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("Authorization", "Content-Type")
                 .allowCredentials(true);

@@ -1,0 +1,43 @@
+# =============================================================================
+# .dockerignore — Files to EXCLUDE from Docker build context
+# =============================================================================
+# The "build context" is everything sent to the Docker daemon before building.
+# Excluding files here makes builds FASTER and images SMALLER.
+# =============================================================================
+
+# Local environment files — NEVER put secrets in Docker images!
+.env
+.env.local
+.env.*.local
+
+# Build output — we build fresh inside Docker, don't need local target/
+target/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Maven wrapper jar (downloaded on first run inside Docker anyway)
+.mvn/wrapper/maven-wrapper.jar
+
+# Compiled class files (if any leaked)
+*.class
+
+# Package lock files (not needed for Maven build)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

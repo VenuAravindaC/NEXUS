@@ -1,0 +1,42 @@
+# =============================================================================
+# .dockerignore — Files to EXCLUDE from Docker build context
+# =============================================================================
+# Same principle as backend: keep secrets out, skip build artifacts,
+# reduce the amount of data Docker needs to send to the daemon.
+# =============================================================================
+
+# Local env files — contain secrets (Clerk keys, VAPID keys)
+.env
+.env.local
+.env.*.local
+
+# Dependencies — we install fresh inside Docker with npm ci
+node_modules/
+
+# Build output — we build fresh inside Docker
+dist/
+dev-dist/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Lock file not needed (npm ci uses package-lock.json which IS included)
+# Actually, package-lock.json IS needed for npm ci — do NOT exclude it
+
+# Logs
+*.log
+npm-debug.log*
+
+# Documentation
+README.md
