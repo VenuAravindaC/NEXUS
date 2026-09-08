@@ -13,6 +13,9 @@ WORKDIR /app
 COPY mvnw mvnw.cmd ./
 COPY .mvn/ .mvn/
 
+# Make mvnw executable — required on Linux (Git on Windows often commits it without +x)
+RUN chmod +x mvnw
+
 # Copy pom.xml first — this lets Docker cache the dependency download layer
 # If pom.xml hasn't changed, Docker reuses the cached layer (HUGE time saver)
 COPY pom.xml .
