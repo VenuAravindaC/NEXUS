@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { useAuth, useUser } from '@clerk/react'
+import { useAuth, useUser } from '@clerk/clerk-react'
 import {
     isNotificationSupported,
     getPermissionState,

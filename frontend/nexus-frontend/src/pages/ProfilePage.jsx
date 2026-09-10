@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useUser, useClerk } from '@clerk/react'
+import { useUser, useClerk } from '@clerk/clerk-react'
 import { LogOut, Mail, Pen, X, Check, Bell, BellOff } from 'lucide-react'
 import { useNotifications } from '../store/notifications'
 

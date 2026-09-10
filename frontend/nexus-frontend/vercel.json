@@ -1,8 +1,1 @@
-{
-  "rewrites": [
-    {
-      "source": "/__clerk/(.*)",
-      "destination": "https://clerk.cue-vert-nine.vercel.app/__clerk/$1"
-    }
-  ]
-}
+{}

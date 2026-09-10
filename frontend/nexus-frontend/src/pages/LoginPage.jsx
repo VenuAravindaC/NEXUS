@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom'
-import { useUser, SignIn } from '@clerk/react'
+import { useUser, SignIn } from '@clerk/clerk-react'
 import { dark } from '@clerk/themes'
 
 // Clerk's hosted SignIn renders white/gray by default — that clash was the

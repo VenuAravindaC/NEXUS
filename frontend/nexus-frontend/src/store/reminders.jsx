@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useEffect } from 'react'
-import { useUser, useAuth } from '@clerk/react'
+import { useUser, useAuth } from '@clerk/clerk-react'
 import { fetchReminders, authFetch } from '../services/api'
 
 /**

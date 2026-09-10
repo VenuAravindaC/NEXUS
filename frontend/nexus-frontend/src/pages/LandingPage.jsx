@@ -10,7 +10,7 @@
  * Fully responsive (mobile-first), keyboard-navigable, aria-labeled.
  */
 
-import { useAuth } from '@clerk/react'
+import { useAuth } from '@clerk/clerk-react'
 import { Link, Navigate } from 'react-router-dom'
 import { Bell, Clock, MapPin, ArrowRight } from 'lucide-react'
 
