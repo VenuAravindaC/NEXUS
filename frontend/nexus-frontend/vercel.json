@@ -1,8 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/__clerk/:path*",
-      "destination": "https://js.clerk.com/:path"
+      "source": "/npm/:match*",
+      "destination": "https://js.clerk.com/npm/:match*"
+    },
+    {
+      "source": "/js/:match*",
+      "destination": "https://js.clerk.com/js/:match*"
     }
   ]
 }
